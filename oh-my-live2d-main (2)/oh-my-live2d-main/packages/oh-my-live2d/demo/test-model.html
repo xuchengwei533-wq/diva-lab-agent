@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Test Model Access</title>
+  </head>
+  <body>
+    <h1>Testing Model Access</h1>
+    <div id="status">Checking model file access...</div>
+    
+    <script>
+      // 测试模型文件是否能被访问
+      fetch('../mao_pro_en/runtime/mao_pro.model3.json')
+        .then(response => {
+          if (response.ok) {
+            document.getElementById('status').textContent = '✅ Model file accessible!';
+            return response.json();
+          } else {
+            document.getElementById('status').textContent = '❌ Model file not accessible: ' + response.status;
+            throw new Error('Model file not accessible');
+          }
+        })
+        .then(data => {
+          console.log('Model data:', data);
+        })
+        .catch(error => {
+          console.error('Error accessing model:', error);
+        });
+    </script>
+  </body>
+</html>

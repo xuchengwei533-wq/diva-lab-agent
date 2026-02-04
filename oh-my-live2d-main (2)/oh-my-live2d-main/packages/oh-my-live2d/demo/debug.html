@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>模型加载调试</title>
+    <script src="../dist/index.js"></script>
+</head>
+<body>
+    <h1>模型加载调试页面</h1>
+    <div id="status">正在检查模型加载情况...</div>
+    <script>
+        console.log('开始加载模型...');
+        
+        // 简单的模型加载测试
+        const oml2d = OML2D.loadOml2d({
+            importType: 'cubism5',
+            models: [
+                {
+                    path: '../mao_pro_en/runtime/mao_pro.model3.json',
+                    showHitAreaFrames: false,
+                    position: [-10, 20],
+                    scale: 0.8
+                }
+            ],
+            debug: true // 启用调试模式
+        });
+
+        oml2d.on('load', (event) => {
+            console.log('模型加载成功:', event);
+            document.getElementById('status').textContent = '模型加载成功！';
+        });
+
+        oml2d.on('error', (event) => {
+            console.error('模型加载错误:', event);
+            document.getElementById('status').textContent = '模型加载失败: ' + event.error;
+        });
+
+        // 检查网络请求
+        fetch('../mao_pro_en/runtime/mao_pro.model3.json')
+            .then(response => {
+                console.log('模型JSON文件状态:', response.status);
+                return response.json();
+            })
+            .then(data => {
+                console.log('模型JSON内容:', data);
+                // 检查纹理文件
+                if (data.FileReferences && data.FileReferences.Textures) {
+                    const texturePath = '../mao_pro_en/runtime/' + data.FileReferences.Textures[0];
+                    return fetch(texturePath);
+                }
+            })
+            .then(response => {
+                if (response) {
+                    console.log('纹理文件状态:', response.status);
+                }
+            })
+            .catch(error => {
+                console.error('文件检查错误:', error);
+            });
+    </script>
+</body>
+</html>

@@ -1,0 +1,202 @@
+项目对齐到新前端页面：功能/接口/函数调用清单（以 chat_interface.html 为参考）
+
+一、系统由哪些服务组成（端口与职责）
+1) 静态页面服务器（8000）
+   - 入口：mao_demo_server.py
+   - 作用：用 HTTP 直接提供 mao_demo.html、chat_interface.html 等静态资源
+   - 访问：
+     - http://localhost:8000/mao_demo.html
+     - http://localhost:8000/chat_interface.html
+
+2) 对话服务（8003）
+   - 文件：backend/qwen_chat_server.py
+   - 作用：将前端消息转发给 DashScope 百炼智能体应用，并以 SSE 方式流式回传
+   - 接口：
+     - GET  /health
+     - POST /api/chat/stream   （SSE：data: {"type":"delta","delta":"..."}\n\n）
+     - POST /api/chat          （非流式调试）
+
+3) TTS 服务（8004，WebSocket）
+   - 文件：backend/tts_ws_server.py
+   - 作用：前端通过 WS 发送“追加文本/提交”，后端调用 DashScope TTS，返回 audio url（或可选 pcm delta）
+   - 接口：
+     - WS /ws/tts?voice=Cherry&model=qwen3-tts-flash&language_type=Chinese
+   - 前端依赖的消息协议：
+     - 发送：{"type":"input_text_buffer.append","text":"..."}
+     - 发送：{"type":"input_text_buffer.commit"}
+     - 发送：{"type":"session.finish"}
+     - 接收：{"type":"session.ready", ...}
+     - 接收：{"type":"response.audio.meta","meta":{"url": "...", "expires_at": ...}}
+     - 接收：{"type":"error","error":"..."}
+
+4) 语音识别 ASR（8006）
+   - 文件：backend/asr_new.py
+   - 作用：接收前端录音转成的 PCM16k 数据，写临时 wav，调用 DashScope ASR，返回识别文本
+   - 接口：
+     - GET  /health
+     - POST /api/voice/start
+       - 请求 JSON：
+         - audio_data: base64(PCM16LE, 16k, mono)
+         - audio_format: "pcm16le_16k_mono"
+       - 响应 JSON：
+         - success: bool
+         - message: string
+         - text: string
+         - has_result: bool
+         - debug: { audio: {duration_sec,rms,peak,zero_frac,...}, asr: {model,code,message,...} }
+     - GET  /api/voice/text
+     - POST /api/voice/clear
+
+5) 音频评分（8005）
+   - 文件：backend/asr_server.py
+   - 作用：接收 base64 音频（wav/mp3/webm/ogg 等），librosa 解码+提特征，PyTorch 模型输出 10 维评分
+   - 接口：
+     - GET  /health
+     - POST /api/audio/score
+       - 请求 JSON：
+         - audio_data: base64(容器音频字节；由 audio_format 指示)
+         - audio_format: "wav" | "mp3" | "webm" | "ogg" | ...
+         - voice_type: "女高音 Soprano" | "女中音 Mezzo" | "男高音 Tenor" | "男中音 Baritone"
+           - 也支持别名：Soprano/Mezzo/Tenor/Baritone（后端会映射）
+       - 响应 JSON：
+         - success: bool
+         - message: string
+         - overall: float（10 维平均）
+         - scores: [{technique: string, score: int(1..5)} x10]
+         - voice_type: string（规范化后的声部）
+         - original_sr: number
+         - target_sr: number
+         - duration_sec: number
+         - rms: number
+
+二、对齐到新前端页面：你最少需要实现/保留哪些“前端函数”
+说明：下面按“能力模块”分组。新前端如果不复用 chat_interface.html，可以按同名或同职责实现。
+
+A. 基础配置（必须）
+1) HOST / API_BASE / VOICE_API_URL / CHAT_API_URL / TTS_WS_URL
+   - 参考：chat_interface.html 中的常量
+   - 目的：统一管理端口与 host（避免 localhost/局域网 IP 不一致导致请求发错）
+
+B. 对话（必须）
+2) sendMessage()
+   - 职责：收集输入框文本 -> append 到 chatHistory -> fetch(`${CHAT_API_URL}/api/chat/stream`) -> 解析 SSE 并更新 UI
+   - 依赖：
+     - extractSseEvents()：将 SSE buffer 切分成 events
+     - createStreamingBotMessage()：创建用于流式追加的消息 DOM
+     - addMessage()：用户消息/最终文本落库
+
+3) extractSseEvents(buffer)
+   - 职责：把 text/event-stream 的 data 行解析成 JSON 字符串数组
+
+4) addMessage(text, sender)
+   - 职责：渲染消息（user/bot）
+
+C. ASR 语音输入转文字（必须，若新前端需要“语音输入”）
+5) initVoiceRecognition()
+   - 职责：申请麦克风权限、创建 MediaRecorder、绑定 ondataavailable/onstop
+   - 输出：用户停止录音后，转成 PCM16k 并调用 sendPcmToServer()
+
+6) toggleRecording()
+   - 职责：控制录音开始/停止，更新按钮状态
+
+7) blobToPcm16kInt16ArrayBuffer(audioBlob)
+   - 职责：WebM/OGG 等录音容器 -> decodeAudioData -> OfflineAudioContext 重采样到 16k -> Float32 -> Int16
+
+8) sendPcmToServer(base64Pcm)
+   - 职责：POST `${VOICE_API_URL}/api/voice/start`，拿到 text 后写入输入框并触发 sendMessage()
+   - 注意：这里实现了“识别完自动发送”
+
+D. 评分（可选：文件评分 + 实时录音评分）
+9) startScoring()
+   - 职责：读取文件 input，arrayBuffer->base64，guessAudioFormatFromFile()，调用 sendAudioForScoring()
+
+10) sendAudioForScoring(audioData, voiceType, audioFormat)
+   - 职责：POST `${API_BASE}/api/audio/score`，并做错误处理
+
+11) displayScoringResults(result)
+   - 职责：渲染总体分/10 维列表/柱状图，并把评分摘要追加到聊天
+   - 依赖：
+     - drawScoreChart(result)
+     - TECH_NAME_MAP（后端 technique -> 中文名映射）
+
+12) toggleScoreRecording() / beginScoreRecording() / confirmScoreVoiceAndStart()
+   - 职责：实现“🎼 录音并评分”的完整交互：
+     - 先弹窗选声部，再开始录音；再次点击结束并提交评分
+   - 数据流：
+     - MediaRecorder 录到 scoreChunks
+     - 如果 window.lamejs 可用：音频 -> decode -> 重采样到 44100 -> MP3 编码 -> base64 -> scoreAudioBase64()
+     - 否则：音频 -> decode -> 重采样到 44100 -> 组 WAV -> base64 -> scoreAudioBase64()
+
+13) scoreAudioBase64(audioBase64, audioFormat)
+   - 职责：打开评分弹窗、showLoadingScoring()、调用 sendAudioForScoring()、displayScoringResults()
+
+E. TTS（可选：需要“语音播报”时）
+14) connectTts()
+   - 职责：new WebSocket(TTS_WS_URL)，处理 response.audio.meta/url 或 delta
+   - 依赖：
+     - ttsFeedDelta(delta)：把模型输出文本分段追加到 buffer
+     - ttsCommit()：发送 commit 触发后端合成
+     - playTtsUrl(url)：用 <audio> 播放
+
+15) closeTts()
+   - 职责：关闭 ws，清理队列和定时器
+
+三、新前端对齐的“最小调用路径”（按用户操作）
+1) 用户输入文字并发送
+   - UI -> sendMessage() -> /api/chat/stream -> SSE delta -> UI 更新
+
+2) 用户点🎤语音输入并自动发送
+   - toggleRecording() start/stop
+   - onstop -> blobToPcm16kInt16ArrayBuffer() -> sendPcmToServer()
+   - /api/voice/start -> 返回 text -> sendMessage()
+
+3) 用户选文件评分
+   - startScoring() -> sendAudioForScoring() -> /api/audio/score -> displayScoringResults()
+
+4) 用户点🎼实时录音评分
+   - toggleScoreRecording() -> 选声部弹窗 -> beginScoreRecording()
+   - stop -> MP3(WAV fallback) -> scoreAudioBase64() -> /api/audio/score -> displayScoringResults()
+
+四、对齐新前端时建议保留的“接口契约”
+1) /api/voice/start 输入：audio_data(base64 PCM16k mono) + audio_format 固定值
+2) /api/audio/score 输入：audio_data(base64 容器字节) + audio_format(扩展名) + voice_type
+3) /api/chat/stream 输入：messages[]（role/content），输出 SSE：delta 事件
+4) /ws/tts 输入：append/commit，输出 meta.url（即可播放）
+
+五、清单汇总（按“对齐新前端”最少需要多少个函数）
+必须（不含 UI 框架/组件代码）：
+1) sendMessage
+2) extractSseEvents
+3) addMessage
+4) createStreamingBotMessage
+5) initVoiceRecognition
+6) toggleRecording
+7) blobToPcm16kInt16ArrayBuffer
+8) sendPcmToServer
+9) startScoring
+10) sendAudioForScoring
+11) displayScoringResults
+12) drawScoreChart
+13) toggleScoreRecording
+14) beginScoreRecording
+15) confirmScoreVoiceAndStart
+16) scoreAudioBase64
+17) guessAudioFormatFromFile
+18) pcm16ToWavArrayBuffer
+19) arrayBufferToBase64
+
+可选（启用 TTS 时）：
+20) connectTts
+21) closeTts
+22) ttsFeedDelta
+23) ttsCommit
+24) playTtsUrl
+
+附：参考实现位置
+- chat_interface.html：oh-my-live2d-main (2)\\oh-my-live2d-main\\chat_interface.html
+- asr_new.py：backend/asr_new.py
+- asr_server.py：backend/asr_server.py
+- qwen_chat_server.py：backend/qwen_chat_server.py
+- tts_ws_server.py：backend/tts_ws_server.py
+- mao_demo_server.py：mao_demo_server.py
+

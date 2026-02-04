@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>hiyori模型文件访问测试</title>
+</head>
+<body>
+    <h1>hiyori模型文件访问测试</h1>
+    <div id="status">正在测试文件访问...</div>
+    
+    <script>
+        async function testFileAccess() {
+            const statusDiv = document.getElementById('status');
+            
+            // 测试模型JSON文件
+            try {
+                const response = await fetch('../hiyori_free_zh/runtime/hiyori_free_t08.model3.json');
+                statusDiv.innerHTML += `<br>模型JSON文件状态: ${response.status}`;
+                
+                if (response.ok) {
+                    const modelData = await response.json();
+                    statusDiv.innerHTML += '<br>✓ 模型JSON文件加载成功';
+                    
+                    // 测试纹理文件
+                    if (modelData.FileReferences && modelData.FileReferences.Textures) {
+                        const texturePath = '../hiyori_free_zh/runtime/' + modelData.FileReferences.Textures[0];
+                        const textureResponse = await fetch(texturePath);
+                        statusDiv.innerHTML += `<br>纹理文件状态: ${textureResponse.status}`;
+                        
+                        if (textureResponse.ok) {
+                            statusDiv.innerHTML += '<br>✓ 纹理文件可访问';
+                        } else {
+                            statusDiv.innerHTML += '<br>✗ 纹理文件不可访问';
+                        }
+                    }
+                    
+                    // 测试moc3文件
+                    if (modelData.FileReferences && modelData.FileReferences.Moc) {
+                        const mocPath = '../hiyori_free_zh/runtime/' + modelData.FileReferences.Moc;
+                        const mocResponse = await fetch(mocPath);
+                        statusDiv.innerHTML += `<br>MOC文件状态: ${mocResponse.status}`;
+                        
+                        if (mocResponse.ok) {
+                            statusDiv.innerHTML += '<br>✓ MOC文件可访问';
+                        } else {
+                            statusDiv.innerHTML += '<br>✗ MOC文件不可访问';
+                        }
+                    }
+                }
+            } catch (error) {
+                statusDiv.innerHTML += `<br>✗ 文件访问错误: ${error.message}`;
+            }
+        }
+        
+        testFileAccess();
+    </script>
+</body>
+</html>

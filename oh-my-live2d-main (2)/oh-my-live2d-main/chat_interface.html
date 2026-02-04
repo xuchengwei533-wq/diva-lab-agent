@@ -1,0 +1,1643 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>滴哇 - 聊天界面</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Microsoft YaHei', Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .back-link-btn {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      z-index: 10000;
+      background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+      color: white;
+      padding: 8px 16px;
+      border-radius: 20px;
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: bold;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+      transition: all 0.3s ease;
+      border: none;
+      cursor: pointer;
+    }
+    .back-link-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+      background: linear-gradient(135deg, #ee5a24, #ff6b6b);
+    }
+
+    .container {
+      display: flex;
+      height: 100vh;
+      padding: 20px;
+      gap: 20px;
+    }
+
+    .character-section {
+      flex: 0 0 35%;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 20px;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .character-title {
+      color: white;
+      font-size: 24px;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    .character-info {
+      color: rgba(255, 255, 255, 0.8);
+      font-size: 14px;
+      text-align: center;
+      margin-top: 20px;
+      line-height: 1.5;
+    }
+    #oml2d-container {
+      width: 100%;
+      height: 400px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      cursor: pointer;
+    }
+
+    .chat-section {
+      flex: 0 0 65%;
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 20px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    }
+
+    .chat-header {
+      padding: 20px;
+      border-bottom: 1px solid #e0e0e0;
+      background: white;
+      border-radius: 20px 20px 0 0;
+    }
+    .chat-title { font-size: 20px; font-weight: bold; color: #333; }
+    .chat-subtitle { font-size: 14px; color: #666; margin-top: 5px; }
+
+    .chat-messages {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+    .message {
+      max-width: 70%;
+      padding: 12px 16px;
+      border-radius: 18px;
+      line-height: 1.4;
+      word-wrap: break-word;
+      white-space: pre-wrap;
+    }
+    .message-bot {
+      align-self: flex-start;
+      background: #f0f0f0;
+      color: #333;
+      border-bottom-left-radius: 4px;
+    }
+    .message-user {
+      align-self: flex-end;
+      background: #667eea;
+      color: white;
+      border-bottom-right-radius: 4px;
+    }
+
+    .chat-input-area {
+      padding: 20px;
+      border-top: 1px solid #e0e0e0;
+      background: white;
+      border-radius: 0 0 20px 20px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .input-group {
+      display: flex;
+      gap: 10px;
+      flex: 1 1 520px;
+      min-width: 320px;
+    }
+    .chat-input {
+      flex: 1;
+      padding: 12px 16px;
+      border: 1px solid #ddd;
+      border-radius: 25px;
+      outline: none;
+      font-size: 14px;
+      transition: border-color 0.3s;
+    }
+    .chat-input:focus { border-color: #667eea; }
+    .send-button {
+      padding: 12px 24px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 25px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background 0.3s;
+      white-space: nowrap;
+    }
+    .send-button:hover { background: #5a6fd8; }
+
+    .voice-button {
+      padding: 12px;
+      background: #ff6b6b;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 16px;
+      width: 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s;
+      flex: 0 0 auto;
+    }
+    .voice-button:hover { background: #ee5a24; transform: scale(1.1); }
+    .voice-button.recording { background: #ff4757; animation: pulse 1.5s infinite; }
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+      100% { transform: scale(1); }
+    }
+    .voice-status {
+      font-size: 12px;
+      color: #666;
+      text-align: center;
+      margin-top: 5px;
+      flex: 1 1 200px;
+      min-width: 180px;
+    }
+
+    .audio-score-trigger {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      font-size: 16px;
+      cursor: pointer;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+      transition: all 0.3s ease;
+      flex: 0 0 auto;
+    }
+    .audio-score-trigger:hover {
+      transform: scale(1.1);
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    }
+    #ttsToggle {
+      background: linear-gradient(135deg, #2ed573 0%, #1e90ff 100%);
+    }
+
+    .audio-scoring-modal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 10000;
+      justify-content: center;
+      align-items: center;
+    }
+    .audio-scoring-modal.active { display: flex; }
+
+    .audio-scoring-section {
+      background: white;
+      border-radius: 15px;
+      padding: 30px;
+      width: 800px;
+      max-width: 95%;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+      position: relative;
+      max-height: 90vh;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+    .scoring-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #eee;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .close-modal {
+      background: #ff6b6b;
+      color: white;
+      border: none;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .close-modal:hover { background: #ff5252; }
+
+    .loading { text-align: center; padding: 20px; color: #666; }
+    .error { color: #ff6b6b; font-size: 12px; margin-top: 5px; }
+
+    .voice-selection { margin-bottom: 10px; }
+    .voice-selection label { display: block; margin-bottom: 5px; font-size: 12px; color: #555; }
+    .voice-select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px; background: white; }
+
+    .file-upload { margin-bottom: 10px; }
+    .file-input { display: none; }
+    .file-label {
+      display: block;
+      padding: 10px;
+      background: #667eea;
+      color: white;
+      border-radius: 5px;
+      text-align: center;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    .file-label:hover { background: #5a6fd8; }
+
+    .score-button {
+      width: 100%;
+      padding: 10px;
+      background: #ff6b6b;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background 0.3s;
+    }
+    .score-button:hover { background: #ee5a24; }
+
+    .scoring-results {
+      margin-top: 15px;
+      padding-top: 15px;
+      border-top: 1px solid #eee;
+      max-height: 600px;
+      overflow-y: auto;
+    }
+    .overall-score { text-align: center; margin-bottom: 15px; }
+    .score-label { font-size: 14px; color: #666; }
+    .score-value { font-size: 24px; font-weight: bold; color: #667eea; }
+
+    .technique { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-top: 10px; }
+    .technique-item {
+      padding: 10px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 8px;
+      text-align: center;
+      font-size: 12px;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .technique-name { font-weight: bold; font-size: 11px; margin-bottom: 4px; }
+    .technique-score {
+      font-size: 14px;
+      font-weight: bold;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+      padding: 2px 4px;
+    }
+
+    .chart-container {
+      text-align: center;
+      margin-top: 20px;
+      padding: 15px;
+      background: #f9f9f9;
+      border-radius: 8px;
+      border: 1px solid #e0e0e0;
+    }
+    .chart-title { font-weight: bold; color: #333; margin-bottom: 15px; font-size: 14px; }
+    .chart-bars {
+      display: flex;
+      justify-content: space-around;
+      align-items: flex-end;
+      height: 180px;
+      padding: 0 30px;
+      margin-bottom: 5px;
+      border-left: 2px solid #333;
+      border-bottom: 2px solid #333;
+      position: relative;
+      overflow-x: auto;
+      gap: 10px;
+    }
+    .chart-bar-item { display: flex; flex-direction: column; align-items: center; margin: 0 5px; min-width: 60px; }
+    .chart-bar {
+      width: 35px;
+      background: linear-gradient(to top, #4CAF50, #8BC34A);
+      border-radius: 4px 4px 0 0;
+      border: 1px solid #388E3C;
+      transition: height 0.5s ease;
+    }
+    .chart-bar-label {
+      font-size: 10px;
+      color: #333;
+      margin-top: 5px;
+      max-width: 80px;
+      text-align: center;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .chart-bar-value { font-size: 11px; font-weight: bold; color: #333; margin-bottom: 3px; }
+    .chart-y-axis { display: flex; justify-content: space-between; padding: 0 30px; font-size: 10px; color: #666; margin-top: 5px; }
+    .chart-y-axis span { width: 20px; text-align: center; }
+  </style>
+</head>
+
+<body>
+  <a href="/mao_demo.html" class="back-link-btn">🏠 返回主页</a>
+
+  <div class="container">
+    <div class="character-section">
+      <h2 class="character-title">滴哇老师</h2>
+      <div id="oml2d-container" title="点击角色区域返回主页"></div>
+      <div class="character-info">
+        <p>我是你的声乐老师滴哇</p>
+        <p>随时为你提供声乐指导</p>
+        <p>点击我可以回到主页哦~</p>
+      </div>
+    </div>
+
+    <div class="chat-section">
+      <div class="chat-header">
+        <div class="chat-title">与滴哇老师对话</div>
+        <div class="chat-subtitle">随时为你提供专业的声乐指导</div>
+      </div>
+
+      <div class="chat-messages" id="chatMessages">
+        <div class="message message-bot">
+          你好！我是你的声乐老师滴哇，很高兴为你服务！有什么声乐方面的问题都可以问我哦~
+        </div>
+      </div>
+
+      <div class="chat-input-area">
+        <div class="input-group">
+          <input type="text" class="chat-input" id="messageInput"
+                 placeholder="输入你想说的话..." onkeypress="handleKeyPress(event)" />
+          <button class="send-button" onclick="sendMessage()">发送</button>
+        </div>
+
+        <button class="voice-button" id="voiceButton" title="语音输入">🎤</button>
+        <div class="voice-status" id="voiceStatus">点击麦克风开始录音</div>
+
+        <button class="audio-score-trigger" id="ttsToggle" title="语音播报开关">🔇</button>
+        <button class="audio-score-trigger" id="scoreLastRecordingTrigger" title="录音并评分" onclick="toggleScoreRecording()">🎼</button>
+        <button class="audio-score-trigger" id="audioScoreTrigger" title="音频评分" onclick="openAudioScoringModal()">📊</button>
+      </div>
+    </div>
+
+    <div class="audio-scoring-modal" id="audioScoringModal">
+      <div class="audio-scoring-section">
+        <div class="scoring-header">
+          <div>
+            <h3>🎤 音频评分功能</h3>
+            <p style="color:#666;font-size:12px;margin-top:6px;">上传音频文件进行演唱技巧评分</p>
+          </div>
+          <button class="close-modal" id="closeModal" title="关闭" onclick="closeAudioScoringModal()">×</button>
+        </div>
+
+        <div class="scoring-controls">
+          <div class="voice-selection">
+            <label for="voiceType">选择声部:</label>
+            <select id="voiceType" class="voice-select">
+              <option value="女高音 Soprano">女高音 Soprano</option>
+              <option value="女中音 Mezzo">女中音 Mezzo</option>
+              <option value="男高音 Tenor">男高音 Tenor</option>
+              <option value="男中音 Baritone">男中音 Baritone</option>
+            </select>
+          </div>
+
+          <div class="file-upload">
+            <input type="file" id="audioFile" accept="audio/*" class="file-input" />
+            <label for="audioFile" class="file-label">📁 选择音频文件</label>
+          </div>
+
+          <button class="score-button" onclick="startScoring()">开始评分</button>
+        </div>
+
+        <div class="scoring-results" id="scoringResults" style="display:none;">
+          <h4>评分结果</h4>
+          <div class="results-container">
+            <div class="overall-score">
+              <span class="score-label">总体均分:</span>
+              <span class="score-value" id="overallScore">-</span>
+            </div>
+            <div class="technique-scores">
+              <div class="technique" id="techniqueScores"></div>
+            </div>
+            <div class="chart-container">
+              <div class="chart-title">演唱技巧评分详情</div>
+              <div class="chart-bars" id="chartBars"></div>
+              <div class="chart-y-axis">
+                <span>5</span><span>4</span><span>3</span><span>2</span><span>1</span><span>0</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="audio-scoring-modal" id="scoreVoiceModal">
+      <div class="audio-scoring-section" style="width:520px;max-width:95%;">
+        <div class="scoring-header">
+          <div>
+            <h3>🎼 录音并评分</h3>
+            <p style="color:#666;font-size:12px;margin-top:6px;">请选择声部后开始录音评分</p>
+          </div>
+          <button class="close-modal" title="关闭" onclick="closeScoreVoiceModal()">×</button>
+        </div>
+
+        <div class="scoring-controls">
+          <div class="voice-selection">
+            <label for="scoreVoiceType">选择声部:</label>
+            <select id="scoreVoiceType" class="voice-select">
+              <option value="女高音 Soprano">女高音 Soprano</option>
+              <option value="女中音 Mezzo">女中音 Mezzo</option>
+              <option value="男高音 Tenor">男高音 Tenor</option>
+              <option value="男中音 Baritone">男中音 Baritone</option>
+            </select>
+          </div>
+
+          <button class="score-button" onclick="confirmScoreVoiceAndStart()">开始录音评分</button>
+          <button class="score-button" style="margin-top:10px;background:#999;" onclick="closeScoreVoiceModal()">取消</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- live2d（可选） -->
+  <script src="packages/oh-my-live2d/dist/index.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.0/lame.min.js"></script>
+
+  <script>
+    // =========================
+    // 后端地址配置
+    // =========================
+    const API_BASE = '';
+    const VOICE_API_URL = '';
+    const CHAT_API_URL  = '';
+
+    // =========================
+    // 流式 TTS：ws://localhost:8004/ws/tts
+    // =========================
+    const WS_SCHEME = (location && location.protocol === 'https:') ? 'wss' : 'ws';
+    const TTS_WS_URL = `${WS_SCHEME}://${location.host}/ws/tts?voice=Cherry&model=qwen3-tts-flash&language_type=Chinese`;
+
+    let ttsEnabled = false;
+    let ttsSocket = null;
+    let ttsPlayer = null;
+    let ttsTextBuf = '';
+    let ttsFlushTimer = null;
+    let ttsReconnectTimer = null;
+    let ttsAudioEl = null;
+
+    // ======== 关键修复 1：稳健 little-endian PCM 解码 ========
+    function base64ToInt16Array(b64) {
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+
+      const n = Math.floor(bytes.byteLength / 2);
+      const out = new Int16Array(n);
+      const view = new DataView(bytes.buffer);
+      for (let i = 0; i < n; i++) out[i] = view.getInt16(i * 2, true);
+      return out;
+    }
+
+    // ======== 关键修复 2：合并分片 + 预缓冲 + 重采样，避免“断裂/抖动” ========
+    class PcmStreamPlayer {
+      constructor(inputSampleRate = 24000) {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        this.ctx = new Ctx();                 // 不强制 sampleRate，自动适配系统
+        this.inRate = inputSampleRate;
+        this.outRate = this.ctx.sampleRate;
+
+        this.queue = [];                      // Int16Array[]
+        this.queuedSamples = 0;
+
+        this.minBufferSec = 0.10;             // 每次至少合并 100ms 再播放（关键）
+        this.startBufferSec = 0.12;           // 首包预缓冲 120ms
+        this.nextTime = 0;
+      }
+
+      async ensureRunning() {
+        if (this.ctx.state !== "running") await this.ctx.resume();
+      }
+
+      resetSchedule() {
+        const now = this.ctx.currentTime;
+        this.nextTime = now + this.startBufferSec;
+        this.queue = [];
+        this.queuedSamples = 0;
+      }
+
+      pushPcm16(int16Arr) {
+        if (!int16Arr || int16Arr.length === 0) return;
+        this.queue.push(int16Arr);
+        this.queuedSamples += int16Arr.length;
+
+        const needSamples = Math.floor(this.inRate * this.minBufferSec);
+        if (this.queuedSamples >= needSamples) {
+          const merged = this._mergeQueue();
+          const float32 = this._toFloatAndResampleIfNeeded(merged);
+          this._playFloat32(float32);
+        }
+      }
+
+      _mergeQueue() {
+        const out = new Int16Array(this.queuedSamples);
+        let off = 0;
+        for (const chunk of this.queue) {
+          out.set(chunk, off);
+          off += chunk.length;
+        }
+        this.queue = [];
+        this.queuedSamples = 0;
+        return out;
+      }
+
+      _toFloatAndResampleIfNeeded(int16) {
+        const f = new Float32Array(int16.length);
+        for (let i = 0; i < int16.length; i++) f[i] = int16[i] / 32768;
+
+        if (this.inRate === this.outRate) return f;
+
+        // 线性重采样：24k -> ctx.sampleRate（通常 48k），避免变调/怪声/抖动
+        const ratio = this.outRate / this.inRate;
+        const outLen = Math.max(1, Math.floor(f.length * ratio));
+        const out = new Float32Array(outLen);
+
+        for (let i = 0; i < outLen; i++) {
+          const src = i / ratio;
+          const i0 = Math.floor(src);
+          const i1 = Math.min(i0 + 1, f.length - 1);
+          const t = src - i0;
+          out[i] = f[i0] * (1 - t) + f[i1] * t;
+        }
+        return out;
+      }
+
+      _playFloat32(float32) {
+        const buffer = this.ctx.createBuffer(1, float32.length, this.outRate);
+        buffer.copyToChannel(float32, 0);
+
+        const src = this.ctx.createBufferSource();
+        src.buffer = buffer;
+        src.connect(this.ctx.destination);
+
+        const now = this.ctx.currentTime;
+        if (this.nextTime < now + 0.02) this.nextTime = now + 0.02;
+
+        src.start(this.nextTime);
+        this.nextTime += buffer.duration;
+      }
+    }
+
+    function scheduleTtsReconnect() {
+      if (!ttsEnabled) return;
+      if (ttsReconnectTimer) return;
+      ttsReconnectTimer = setTimeout(async () => {
+        ttsReconnectTimer = null;
+        try { await connectTts(); } catch (_) {}
+      }, 600);
+    }
+
+    async function connectTts() {
+      if (ttsSocket && (ttsSocket.readyState === WebSocket.OPEN || ttsSocket.readyState === WebSocket.CONNECTING)) return;
+
+      ttsPlayer = ttsPlayer || new PcmStreamPlayer(24000);
+      await ttsPlayer.ensureRunning();
+
+      ttsSocket = new WebSocket(TTS_WS_URL);
+
+      ttsSocket.onopen = () => {
+        console.log('[TTS] ws open');
+        if (ttsPlayer) ttsPlayer.resetSchedule();
+      };
+
+      ttsSocket.onerror = (e) => {
+        console.error('[TTS] ws error', e);
+      };
+
+      ttsSocket.onclose = () => {
+        console.log('[TTS] ws close');
+        // 展示用：断线自动重连，避免你现场一断就没声音
+        scheduleTtsReconnect();
+      };
+
+      ttsSocket.onmessage = (evt) => {
+        let msg;
+        try { msg = JSON.parse(evt.data); } catch { return; }
+
+        console.log("[TTS] <-", msg.type);
+
+        if (msg.type === 'response.audio.delta' && msg.delta) {
+          try {
+            const int16 = base64ToInt16Array(msg.delta);
+            ttsPlayer.pushPcm16(int16);
+          } catch (e) {
+            console.warn("[TTS] delta decode failed, will rely on meta.url", e);
+          }
+          return;
+        }
+
+        if (msg.type === 'response.audio.meta' && msg.meta && msg.meta.url) {
+          console.log("[TTS] meta url:", msg.meta.url);
+          playTtsUrl(msg.meta.url);
+          return;
+        }
+
+        if (msg.type === 'error') {
+          console.error('[TTS] error:', msg.error);
+        }
+      };
+    }
+
+    function closeTts() {
+      try {
+        if (ttsReconnectTimer) { clearTimeout(ttsReconnectTimer); ttsReconnectTimer = null; }
+        if (ttsFlushTimer) { clearInterval(ttsFlushTimer); ttsFlushTimer = null; }
+        if (ttsSocket && ttsSocket.readyState === WebSocket.OPEN) {
+          try { ttsSocket.send(JSON.stringify({ type: "session.finish" })); } catch (_) {}
+          ttsSocket.close();
+        }
+      } catch (_) {}
+      ttsSocket = null;
+      ttsTextBuf = '';
+      ttsUrlQueue = [];
+      ttsUrlPlaying = false;
+      if (ttsAudioEl) {
+        ttsAudioEl.pause();
+        ttsAudioEl = null;
+      }
+    }
+
+    let ttsUrlQueue = [];
+    let ttsUrlPlaying = false;
+
+    function playNextTtsUrl() {
+      if (!ttsAudioEl) return;
+      const nextUrl = ttsUrlQueue.shift();
+      if (!nextUrl) {
+        ttsUrlPlaying = false;
+        return;
+      }
+      ttsUrlPlaying = true;
+      ttsAudioEl.src = nextUrl;
+      ttsAudioEl.play().catch(err => {
+        console.warn("[TTS] audio play blocked:", err);
+        setTimeout(playNextTtsUrl, 150);
+      });
+    }
+
+    function playTtsUrl(url) {
+      if (!url) return;
+      if (!ttsAudioEl) {
+        ttsAudioEl = new Audio();
+        ttsAudioEl.preload = "auto";
+        ttsAudioEl.onended = () => playNextTtsUrl();
+        ttsAudioEl.onerror = () => playNextTtsUrl();
+      }
+      ttsUrlQueue.push(url);
+      if (!ttsUrlPlaying) playNextTtsUrl();
+    }
+
+    function ttsAppendText(text) {
+      if (!ttsEnabled) return;
+      if (!ttsSocket || ttsSocket.readyState !== WebSocket.OPEN) return;
+      if (!text || !text.trim()) return;
+      ttsSocket.send(JSON.stringify({ type: "input_text_buffer.append", text }));
+    }
+
+    function ttsCommit() {
+      if (!ttsEnabled) return;
+      if (!ttsSocket || ttsSocket.readyState !== WebSocket.OPEN) return;
+      ttsSocket.send(JSON.stringify({ type: "input_text_buffer.commit" }));
+    }
+
+    // ======== 关键修复 3：别用 180ms/10字，把“段”搞得太碎 ========
+    function startTtsFlushTimer() {
+      if (ttsFlushTimer) return;
+      ttsFlushTimer = setInterval(() => {
+        if (!ttsEnabled) return;
+        if (!ttsTextBuf) return;
+        // 定时 flush：即使没等到标点也发出去
+        ttsAppendText(ttsTextBuf);
+        ttsTextBuf = '';
+      }, 450); // 建议 450ms（与你后端 FLUSH_INTERVAL_MS 默认一致）
+    }
+
+    function ttsFeedDelta(delta) {
+      if (!ttsEnabled) return;
+      if (!delta) return;
+
+      ttsTextBuf += delta;
+
+      const shouldFlush =
+        /[。！？!?；;，,\n]/.test(ttsTextBuf) || ttsTextBuf.length >= 24; // 24字更稳，配合后端 MIN_CHARS_PER_REQ
+
+      if (shouldFlush) {
+        ttsAppendText(ttsTextBuf);
+        ttsTextBuf = '';
+      }
+    }
+
+    // =========================
+    // Live2D 初始化
+    // =========================
+    let oml2d = null;
+    try {
+      if (window.OML2D) {
+        oml2d = OML2D.loadOml2d({
+          importType: 'cubism5',
+          models: [
+            {
+              path: 'mao_pro_en/runtime/mao_pro.model3.json',
+              scale: 0.07,
+              position: [0, 0],
+              showHitAreaFrames: false,
+              motionPreloadStrategy: 'ALL'
+            }
+          ],
+          tips: { welcomeTips: { duration: 0, priority: 0 }, idleTips: { duration: 0, priority: 0 } }
+        });
+      }
+    } catch (e) {
+      console.warn('Live2D 初始化失败（可忽略）:', e);
+    }
+    function goBack() { window.location.href = 'mao_demo.html'; }
+    (function bindBackClick() {
+      const container = document.getElementById('oml2d-container');
+      if (container) container.addEventListener('click', goBack);
+    })();
+
+    function openAudioScoringModal() {
+      const modal = document.getElementById('audioScoringModal');
+      if (modal) modal.classList.add('active');
+    }
+    function closeAudioScoringModal() {
+      const modal = document.getElementById('audioScoringModal');
+      if (modal) modal.classList.remove('active');
+    }
+
+    // =========================
+    // DOM
+    // =========================
+    let isRecording = false;
+    let mediaRecorder = null;
+    let micStream = null;
+    let asrChunks = [];
+    let lastRecordingWavBase64 = '';
+    let scoreVoiceTypeChosen = '女高音 Soprano';
+    let scoreRecorder = null;
+    let isScoreRecording = false;
+    let scoreChunks = [];
+    let lastScoreRecordingBase64 = '';
+    let lastScoreRecordingFormat = 'mp3';
+
+    const voiceButton = document.getElementById('voiceButton');
+    const voiceStatus = document.getElementById('voiceStatus');
+    const messageInput = document.getElementById('messageInput');
+    const chatMessages = document.getElementById('chatMessages');
+    const ttsToggleBtn = document.getElementById('ttsToggle');
+
+    const TECH_NAME_MAP = {
+      "vibrato": "颤音技巧",
+      "throat": "喉位控制",
+      "position": "发声位置",
+      "open": "声道开放度",
+      "clean": "音色纯净度",
+      "resonate": "共鸣质量",
+      "unify": "声音统一性",
+      "falsetto": "假声技巧",
+      "chest": "胸声/真声",
+      "nasal": "鼻腔共鸣"
+    };
+
+    // =========================
+    // 聊天上下文
+    // =========================
+    const SYSTEM_PROMPT = "你是“滴哇老师”，一位专业、耐心、严格但友好的美声声乐老师。你擅长给出可执行的练习建议（呼吸、支点、共鸣、咬字、连贯、元音统一、音区过渡等），回答要结构清晰、步骤明确、避免空话。在输出时，应当保持一位老师的严谨，避免用太多的语气词，每次回答控制在100个汉字之内";
+    const chatHistory = [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "assistant", content: "你好！我是你的声乐老师滴哇，很高兴为你服务！有什么声乐方面的问题都可以问我哦~" }
+    ];
+
+    function arrayBufferToBase64(buffer) {
+      const uint8Array = new Uint8Array(buffer);
+      let binary = '';
+      for (let i = 0; i < uint8Array.length; i++) binary += String.fromCharCode(uint8Array[i]);
+      return btoa(binary);
+    }
+
+    function writeAscii(view, offset, str) {
+      for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+    }
+
+    function pcm16ToWavArrayBuffer(pcm16ArrayBuffer, sampleRate = 16000, numChannels = 1) {
+      const pcmBytes = new Uint8Array(pcm16ArrayBuffer);
+      const dataLen = pcmBytes.byteLength;
+      const buffer = new ArrayBuffer(44 + dataLen);
+      const view = new DataView(buffer);
+
+      writeAscii(view, 0, 'RIFF');
+      view.setUint32(4, 36 + dataLen, true);
+      writeAscii(view, 8, 'WAVE');
+      writeAscii(view, 12, 'fmt ');
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, numChannels, true);
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, sampleRate * numChannels * 2, true);
+      view.setUint16(32, numChannels * 2, true);
+      view.setUint16(34, 16, true);
+      writeAscii(view, 36, 'data');
+      view.setUint32(40, dataLen, true);
+
+      new Uint8Array(buffer, 44).set(pcmBytes);
+      return buffer;
+    }
+
+    async function blobToPcm16kInt16ArrayBuffer(audioBlob) {
+      const arrayBuffer = await audioBlob.arrayBuffer();
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      const audioCtx = new AudioCtx();
+      let decoded = null;
+      try {
+        decoded = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+      } catch (_) {
+        await new Promise(r => setTimeout(r, 50));
+        decoded = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+      } finally {
+        try { await audioCtx.close(); } catch (_) {}
+      }
+
+      const targetSampleRate = 16000;
+      const length = Math.round(decoded.duration * targetSampleRate);
+      const offline = new OfflineAudioContext(1, length, targetSampleRate);
+
+      const source = offline.createBufferSource();
+      source.buffer = decoded;
+      source.connect(offline.destination);
+      source.start(0);
+
+      const rendered = await offline.startRendering();
+
+      const float32 = rendered.getChannelData(0);
+      const int16 = new Int16Array(float32.length);
+      for (let i = 0; i < float32.length; i++) {
+        const s = Math.max(-1, Math.min(1, float32[i]));
+        int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+      }
+      return int16.buffer;
+    }
+
+    async function blobToPcmInt16ArrayBuffer(audioBlob, targetSampleRate) {
+      const arrayBuffer = await audioBlob.arrayBuffer();
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      const audioCtx = new AudioCtx();
+      let decoded = null;
+      try {
+        decoded = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+      } catch (_) {
+        await new Promise(r => setTimeout(r, 50));
+        decoded = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+      } finally {
+        try { await audioCtx.close(); } catch (_) {}
+      }
+
+      const length = Math.round(decoded.duration * targetSampleRate);
+      const offline = new OfflineAudioContext(1, length, targetSampleRate);
+
+      const source = offline.createBufferSource();
+      source.buffer = decoded;
+      source.connect(offline.destination);
+      source.start(0);
+
+      const rendered = await offline.startRendering();
+
+      const float32 = rendered.getChannelData(0);
+      const int16 = new Int16Array(float32.length);
+      for (let i = 0; i < float32.length; i++) {
+        const s = Math.max(-1, Math.min(1, float32[i]));
+        int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+      }
+      return int16.buffer;
+    }
+
+    async function initVoiceRecognition() {
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          voiceStatus.textContent = '浏览器不支持录音功能';
+          voiceButton.disabled = true;
+          return;
+        }
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: true }
+        });
+        micStream = stream;
+
+        const options = {};
+        if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+          options.mimeType = 'audio/webm;codecs=opus';
+        } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+          options.mimeType = 'audio/webm';
+        }
+
+        mediaRecorder = new MediaRecorder(stream, options);
+        mediaRecorder.ondataavailable = (event) => { if (event.data && event.data.size > 0) asrChunks.push(event.data); };
+
+        mediaRecorder.onstop = async () => {
+          try {
+            if (asrChunks.length === 0) { voiceStatus.textContent = '录音数据为空，请重试'; return; }
+            voiceStatus.textContent = '正在转换音频格式(PCM16k)...';
+
+            const audioBlob = new Blob(asrChunks, { type: mediaRecorder.mimeType });
+            asrChunks = [];
+
+            const pcmArrayBuffer = await blobToPcm16kInt16ArrayBuffer(audioBlob);
+            const base64Pcm = arrayBufferToBase64(pcmArrayBuffer);
+            const wavArrayBuffer = pcm16ToWavArrayBuffer(pcmArrayBuffer, 16000, 1);
+            lastRecordingWavBase64 = arrayBufferToBase64(wavArrayBuffer);
+
+            await sendPcmToServer(base64Pcm);
+          } catch (err) {
+            console.error('录音停止处理失败:', err);
+            voiceStatus.textContent = '音频处理失败: ' + err.message;
+          }
+        };
+
+        voiceStatus.textContent = '点击麦克风开始录音';
+        voiceButton.disabled = false;
+
+      } catch (error) {
+        console.error('语音识别初始化失败:', error);
+        voiceStatus.textContent = '麦克风权限获取失败: ' + error.message;
+        voiceButton.disabled = true;
+      }
+    }
+
+    function toggleRecording() {
+      if (!mediaRecorder) { voiceStatus.textContent = '语音识别未初始化'; return; }
+      if (isScoreRecording) { alert('正在进行评分录音，请先结束'); return; }
+
+      if (!isRecording) {
+        asrChunks = [];
+        mediaRecorder.start();
+        isRecording = true;
+        voiceButton.classList.add('recording');
+        voiceButton.innerHTML = '⏹️';
+        voiceStatus.textContent = '录音中... 点击停止';
+        const scoreBtn = document.getElementById('scoreLastRecordingTrigger');
+        if (scoreBtn) scoreBtn.disabled = true;
+      } else {
+        mediaRecorder.stop();
+        isRecording = false;
+        voiceButton.classList.remove('recording');
+        voiceButton.innerHTML = '🎤';
+        voiceStatus.textContent = '识别中...';
+        const scoreBtn = document.getElementById('scoreLastRecordingTrigger');
+        if (scoreBtn) scoreBtn.disabled = false;
+      }
+    }
+
+    async function sendPcmToServer(base64Pcm) {
+      try {
+        voiceStatus.textContent = '识别中...';
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+        console.info('[ASR] request', {
+          url: `${VOICE_API_URL}/api/voice/start`,
+          audio_data_len: (base64Pcm || '').length,
+          audio_format: 'pcm16le_16k_mono'
+        });
+
+        const response = await fetch(`${VOICE_API_URL}/api/voice/start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ audio_data: base64Pcm, audio_format: 'pcm16le_16k_mono' }),
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        const result = await response.json().catch(() => ({}));
+        console.info('[ASR] response', { ok: response.ok, status: response.status, result });
+        if (!response.ok) {
+          console.error('语音识别服务错误:', result);
+          voiceStatus.textContent = '语音识别服务错误: ' + (result.error || JSON.stringify(result) || response.status);
+          return;
+        }
+
+        const text = (result.text || '').trim();
+        if (!text) {
+          const dbg = result && result.debug ? result.debug : {};
+          const audio = dbg && dbg.audio ? dbg.audio : {};
+          const asr = dbg && dbg.asr ? dbg.asr : {};
+          const len = (base64Pcm || '').length;
+          const dur = (typeof audio.duration_sec === 'number') ? audio.duration_sec.toFixed(2) : '-';
+          const rms = (typeof audio.rms === 'number') ? Math.round(audio.rms) : '-';
+          const peak = (typeof audio.peak === 'number') ? audio.peak : '-';
+          const zf = (typeof audio.zero_frac === 'number') ? audio.zero_frac.toFixed(2) : '-';
+          const model = asr.model || '-';
+          const code = (asr.code || asr.status_code || '') ? (asr.code || asr.status_code) : '';
+          voiceStatus.textContent = `未识别到文本（len=${len} dur=${dur}s rms=${rms} peak=${peak} zero=${zf} model=${model}${code ? ' code=' + code : ''}）`;
+          return;
+        }
+
+        messageInput.value = text;
+        voiceStatus.textContent = '识别完成，已发送';
+        await sendMessage();
+      } catch (error) {
+        console.error('发送音频失败:', error);
+        voiceStatus.textContent = (error.name === 'AbortError') ? '识别请求超时（后端30秒内未返回）' : ('发送音频失败: ' + error.message);
+      }
+    }
+
+    function guessAudioFormatFromFile(file) {
+      if (!file) return 'wav';
+      const name = file.name || '';
+      const idx = name.lastIndexOf('.');
+      let ext = idx >= 0 ? name.slice(idx + 1).toLowerCase() : '';
+      if (!ext && file.type) ext = (file.type.split('/').pop() || '').toLowerCase();
+      if (ext === 'mpeg') ext = 'mp3';
+      if (ext === 'x-wav' || ext === 'wave') ext = 'wav';
+      return ext || 'wav';
+    }
+
+    async function scoreAudioBase64(audioBase64, audioFormat) {
+      const voiceType = scoreVoiceTypeChosen || document.getElementById('voiceType')?.value || '女高音 Soprano';
+      const modal = document.getElementById('audioScoringModal');
+      if (modal && !modal.classList.contains('active')) modal.classList.add('active');
+      showLoadingScoring();
+
+      try {
+        const scoringResult = await sendAudioForScoring(audioBase64, voiceType, audioFormat || 'wav');
+        displayScoringResults(scoringResult);
+      } catch (error) {
+        console.error('音频评分失败:', error);
+        showError('音频评分失败: ' + error.message);
+      }
+    }
+
+    function openScoreVoiceModal() {
+      const modal = document.getElementById('scoreVoiceModal');
+      if (modal) modal.classList.add('active');
+    }
+
+    function closeScoreVoiceModal() {
+      const modal = document.getElementById('scoreVoiceModal');
+      if (modal) modal.classList.remove('active');
+    }
+
+    function confirmScoreVoiceAndStart() {
+      const sel = document.getElementById('scoreVoiceType');
+      scoreVoiceTypeChosen = (sel && sel.value) ? sel.value : '女高音 Soprano';
+      closeScoreVoiceModal();
+      beginScoreRecording();
+    }
+
+    function beginScoreRecording() {
+      if (!micStream) { voiceStatus.textContent = '语音识别未初始化'; return; }
+      if (isRecording) { alert('正在进行语音输入录音，请先结束'); return; }
+      if (isScoreRecording) return;
+
+      const options = {};
+      let mime = '';
+      if (MediaRecorder.isTypeSupported('audio/mpeg')) mime = 'audio/mpeg';
+      else if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) mime = 'audio/webm;codecs=opus';
+      else if (MediaRecorder.isTypeSupported('audio/webm')) mime = 'audio/webm';
+      else if (MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')) mime = 'audio/ogg;codecs=opus';
+      if (mime) options.mimeType = mime;
+
+      scoreRecorder = new MediaRecorder(micStream, options);
+      scoreChunks = [];
+      scoreRecorder.ondataavailable = (event) => { if (event.data && event.data.size > 0) scoreChunks.push(event.data); };
+      scoreRecorder.onstop = async () => {
+        try {
+          if (!scoreChunks.length) { voiceStatus.textContent = '录音数据为空，请重试'; return; }
+          voiceStatus.textContent = '评分中...';
+
+          const audioBlob = new Blob(scoreChunks, { type: scoreRecorder.mimeType });
+          scoreChunks = [];
+
+          const canEncodeMp3 = (window.lamejs && window.lamejs.Mp3Encoder);
+          if (canEncodeMp3) {
+            const pcmBuffer = await blobToPcmInt16ArrayBuffer(audioBlob, 44100);
+            const pcm16 = new Int16Array(pcmBuffer);
+            const mp3Encoder = new lamejs.Mp3Encoder(1, 44100, 128);
+            const mp3Data = [];
+            const sampleBlockSize = 1152;
+
+            for (let i = 0; i < pcm16.length; i += sampleBlockSize) {
+              const chunk = pcm16.subarray(i, i + sampleBlockSize);
+              const mp3Chunk = mp3Encoder.encodeBuffer(chunk);
+              if (mp3Chunk && mp3Chunk.length) mp3Data.push(new Uint8Array(mp3Chunk));
+            }
+            const finalChunk = mp3Encoder.flush();
+            if (finalChunk && finalChunk.length) mp3Data.push(new Uint8Array(finalChunk));
+
+            const mp3Blob = new Blob(mp3Data, { type: 'audio/mpeg' });
+            const mp3Ab = await mp3Blob.arrayBuffer();
+            lastScoreRecordingBase64 = arrayBufferToBase64(mp3Ab);
+            lastScoreRecordingFormat = 'mp3';
+          } else {
+            const pcmBuffer = await blobToPcmInt16ArrayBuffer(audioBlob, 44100);
+            const wavArrayBuffer = pcm16ToWavArrayBuffer(pcmBuffer, 44100, 1);
+            lastScoreRecordingBase64 = arrayBufferToBase64(wavArrayBuffer);
+            lastScoreRecordingFormat = 'wav';
+          }
+
+          await scoreAudioBase64(lastScoreRecordingBase64, lastScoreRecordingFormat);
+        } catch (e) {
+          console.error(e);
+          showError('音频评分失败: ' + e.message);
+        } finally {
+          isScoreRecording = false;
+          const scoreBtn = document.getElementById('scoreLastRecordingTrigger');
+          if (scoreBtn) scoreBtn.innerHTML = '🎼';
+          voiceButton.disabled = false;
+        }
+      };
+
+      const scoreBtn = document.getElementById('scoreLastRecordingTrigger');
+      scoreRecorder.start();
+      isScoreRecording = true;
+
+      if (scoreBtn) scoreBtn.innerHTML = '⏹️';
+      voiceButton.disabled = true;
+      voiceStatus.textContent = '评分录音中... 再点一次结束';
+    }
+
+    function toggleScoreRecording() {
+      if (!micStream) { voiceStatus.textContent = '语音识别未初始化'; return; }
+      if (isRecording) { alert('正在进行语音输入录音，请先结束'); return; }
+
+      const scoreBtn = document.getElementById('scoreLastRecordingTrigger');
+      if (!isScoreRecording) {
+        openScoreVoiceModal();
+      } else {
+        if (scoreRecorder && scoreRecorder.state !== 'inactive') scoreRecorder.stop();
+        if (scoreBtn) scoreBtn.innerHTML = '🎼';
+      }
+    }
+
+    // =========================
+    // 聊天：SSE 流式输出
+    // =========================
+    function addMessage(text, sender) {
+      const messageDiv = document.createElement('div');
+      messageDiv.className = `message message-${sender}`;
+      messageDiv.textContent = text;
+      chatMessages.appendChild(messageDiv);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+      return messageDiv;
+    }
+
+    function handleKeyPress(event) { if (event.key === 'Enter') sendMessage(); }
+
+    function createStreamingBotMessage() {
+      const div = document.createElement('div');
+      div.className = 'message message-bot';
+      div.textContent = '';
+      chatMessages.appendChild(div);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+      return div;
+    }
+
+    function extractSseEvents(buffer) {
+      const events = [];
+      let idx;
+      while ((idx = buffer.indexOf('\n\n')) !== -1) {
+        const rawEvent = buffer.slice(0, idx);
+        buffer = buffer.slice(idx + 2);
+
+        const lines = rawEvent.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data:')) {
+            const dataStr = line.slice(5).trim();
+            if (dataStr) events.push(dataStr);
+          }
+        }
+      }
+      return { events, rest: buffer };
+    }
+
+    async function sendMessage() {
+      const message = messageInput.value.trim();
+      if (!message) return;
+
+      addMessage(message, 'user');
+      messageInput.value = '';
+      chatHistory.push({ role: 'user', content: message });
+
+      const botDiv = createStreamingBotMessage();
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 120000);
+
+      // 新一轮：清空 TTS 缓冲
+      ttsTextBuf = '';
+      ttsUrlQueue = [];
+      ttsUrlPlaying = false;
+      if (ttsAudioEl) ttsAudioEl.pause();
+
+      // 启用 TTS 时保持长连接，避免每轮握手
+      if (ttsEnabled) {
+        try {
+          await connectTts();
+          startTtsFlushTimer();
+        } catch (_) {}
+      }
+
+      try {
+        const resp = await fetch(`${CHAT_API_URL}/api/chat/stream`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: "qwen-plus", messages: chatHistory }),
+          signal: controller.signal
+        });
+
+        if (!resp.ok || !resp.body) {
+          const errText = await resp.text().catch(() => '');
+          botDiv.textContent = `请求失败：HTTP ${resp.status}\n${errText}`;
+          return;
+        }
+
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+
+        let buffer = '';
+        let fullText = '';
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const { events, rest } = extractSseEvents(buffer);
+          buffer = rest;
+
+          for (const dataStr of events) {
+            let obj = null;
+            try { obj = JSON.parse(dataStr); } catch (_) {}
+            if (!obj) continue;
+
+            if (obj.type === 'delta' && obj.delta) {
+              fullText += obj.delta;
+              botDiv.textContent = fullText;
+              chatMessages.scrollTop = chatMessages.scrollHeight;
+
+              // TTS：边出字边喂
+              if (ttsEnabled) ttsFeedDelta(obj.delta);
+
+            } else if (obj.type === 'error') {
+              botDiv.textContent = `模型调用错误：${obj.error}`;
+            }
+          }
+        }
+
+        if (fullText.trim()) {
+          chatHistory.push({ role: 'assistant', content: fullText });
+        } else {
+          const fallback = "我这次没有生成出有效回复。你可以换一种说法再问一次。";
+          botDiv.textContent = fallback;
+          chatHistory.push({ role: 'assistant', content: fallback });
+          fullText = fallback;
+        }
+
+        // 收尾：把尾巴 flush + commit
+        if (ttsEnabled) {
+          if (ttsTextBuf.trim()) {
+            ttsAppendText(ttsTextBuf);
+            ttsTextBuf = '';
+          }
+          ttsCommit();
+        }
+
+      } catch (e) {
+        botDiv.textContent = (e.name === 'AbortError')
+          ? '请求超时：后端在 120 秒内未完成响应。'
+          : ('请求异常：' + e.message);
+      } finally {
+        clearTimeout(timeoutId);
+        controller.abort();
+      }
+    }
+
+    // =========================
+    // 音频评分
+    // =========================
+    async function startScoring() {
+      const fileInput = document.getElementById('audioFile');
+      const voiceType = document.getElementById('voiceType').value;
+      const file = fileInput.files[0];
+      if (!file) { alert('请先选择一个音频文件'); return; }
+
+      const modal = document.getElementById('audioScoringModal');
+      if (modal && !modal.classList.contains('active')) modal.classList.add('active');
+
+      showLoadingScoring();
+
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const base64Audio = arrayBufferToBase64(arrayBuffer);
+        const audioFormat = guessAudioFormatFromFile(file);
+        const scoringResult = await sendAudioForScoring(base64Audio, voiceType, audioFormat);
+        displayScoringResults(scoringResult);
+      } catch (error) {
+        console.error('音频评分失败:', error);
+        showError('音频评分失败: ' + error.message);
+      }
+    }
+
+    function showLoadingScoring() {
+      const resultsDiv = document.getElementById('scoringResults');
+      if (!resultsDiv) return;
+      let loadingDiv = resultsDiv.querySelector('.loading');
+      if (!loadingDiv) {
+        loadingDiv = document.createElement('div');
+        loadingDiv.className = 'loading';
+        loadingDiv.innerHTML = `<p>正在分析音频...</p><p>请稍候...</p>`;
+        resultsDiv.insertBefore(loadingDiv, resultsDiv.firstChild);
+      }
+      resultsDiv.style.display = 'block';
+    }
+
+    async function sendAudioForScoring(audioData, voiceType, audioFormat = 'wav') {
+      const response = await fetch(`${API_BASE}/api/audio/score`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          audio_data: audioData,
+          voice_type: voiceType,
+          audio_format: audioFormat
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || '音频评分失败');
+      }
+
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.message || '音频评分失败');
+      }
+
+      const scoringResult = {
+        overall: result.overall,
+        scores: result.scores
+      };
+
+      return scoringResult;
+    }
+
+    function displayScoringResults(result) {
+      const resultsDiv = document.getElementById('scoringResults');
+      const overallScore = document.getElementById('overallScore');
+      const techniqueScores = document.getElementById('techniqueScores');
+
+      const loadingDiv = resultsDiv?.querySelector('.loading');
+      if (loadingDiv) loadingDiv.remove();
+
+      if (overallScore) overallScore.textContent = Number(result.overall).toFixed(1);
+
+      if (techniqueScores) {
+        techniqueScores.innerHTML = '';
+        (result.scores || []).forEach(item => {
+          const techniqueDiv = document.createElement('div');
+          techniqueDiv.className = 'technique-item';
+          const displayName = TECH_NAME_MAP[item.technique] || item.technique;
+          techniqueDiv.innerHTML = `
+            <span class="technique-name">${displayName}</span>
+            <span class="technique-score">${item.score}/5</span>
+          `;
+          techniqueScores.appendChild(techniqueDiv);
+        });
+      }
+
+      if (resultsDiv) resultsDiv.style.display = 'block';
+      drawScoreChart(result);
+
+      let scoreDetails = `🎤 音频评分结果\n总体评分: ${Number(result.overall).toFixed(1)}\n\n`;
+      scoreDetails += `各项评分：\n`;
+      (result.scores || []).forEach(item => {
+        const displayName = TECH_NAME_MAP[item.technique] || item.technique;
+        scoreDetails += `• ${displayName}: ${item.score}分\n`;
+      });
+      addMessage(scoreDetails, 'bot');
+
+      sendScoringToLLM(result);
+    }
+
+    async function sendScoringToLLM(result) {
+      let promptText = `我刚刚完成了一次音频评分，总体评分是${Number(result.overall).toFixed(1)}分。\n\n`;
+      promptText += `各项评分详情：\n`;
+      (result.scores || []).forEach(item => {
+        const displayName = TECH_NAME_MAP[item.technique] || item.technique;
+        promptText += `• ${displayName}: ${item.score}分\n`;
+      });
+      promptText += `\n根据我的评分，请给出具体的改进建议，帮助我提升发音和表达水平。1分是最高分，5分是最低分`;
+
+      addMessage('正在根据评分生成建议...', 'bot');
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
+
+      try {
+        const resp = await fetch(`${CHAT_API_URL}/api/chat/stream`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: "qwen-plus", messages: [{ role: 'user', content: promptText }] }),
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!resp.ok || !resp.body) {
+          const lastBotMsg = chatMessages.lastElementChild;
+          if (lastBotMsg?.textContent === '正在根据评分生成建议...') {
+            lastBotMsg.textContent = '生成建议失败';
+          }
+          return;
+        }
+
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+        let fullText = '';
+
+        const suggestionBotDiv = createStreamingBotMessage();
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const { events, rest } = extractSseEvents(buffer);
+          buffer = rest;
+
+          for (const dataStr of events) {
+            let obj = null;
+            try { obj = JSON.parse(dataStr); } catch (_) {}
+            if (!obj) continue;
+
+            if (obj.type === 'delta' && obj.delta) {
+              fullText += obj.delta;
+              suggestionBotDiv.textContent = fullText;
+              chatMessages.scrollTop = chatMessages.scrollHeight;
+            } else if (obj.type === 'error') {
+              suggestionBotDiv.textContent = `生成建议错误：${obj.error}`;
+            }
+          }
+        }
+
+        if (fullText.trim()) {
+          chatHistory.push({ role: 'assistant', content: fullText });
+        } else {
+          suggestionBotDiv.textContent = '抱歉，我这次没有生成出有效建议。';
+        }
+
+      } catch (e) {
+        const lastBotMsg = chatMessages.lastElementChild;
+        if (lastBotMsg?.textContent === '正在根据评分生成建议...') {
+          lastBotMsg.textContent = (e.name === 'AbortError')
+            ? '生成建议超时，请稍后重试。'
+            : '生成建议失败：' + e.message;
+        }
+      } finally {
+        clearTimeout(timeoutId);
+        controller.abort();
+      }
+    }
+
+    function drawScoreChart(result) {
+      const chartBars = document.getElementById('chartBars');
+      if (!chartBars) return;
+
+      const scores = result.scores || [];
+      if (scores.length === 0) {
+        chartBars.innerHTML = '<p style="color:#999;">暂无评分数据</p>';
+        return;
+      }
+
+      chartBars.innerHTML = '';
+      scores.forEach(item => {
+        const barHeight = (item.score / 5) * 160;
+        const displayName = TECH_NAME_MAP[item.technique] || item.technique;
+        const barItem = document.createElement('div');
+        barItem.className = 'chart-bar-item';
+        barItem.innerHTML = `
+          <span class="chart-bar-value">${item.score}</span>
+          <div class="chart-bar" style="height:${barHeight}px;"></div>
+          <span class="chart-bar-label" title="${displayName}">${displayName}</span>
+        `;
+        chartBars.appendChild(barItem);
+      });
+    }
+
+    function showError(message) {
+      const resultsDiv = document.getElementById('scoringResults');
+      if (!resultsDiv) return;
+      resultsDiv.innerHTML = `<div class="error"><p>${message}</p></div>`;
+      resultsDiv.style.display = 'block';
+    }
+
+    // =========================
+    // 初始化
+    // =========================
+    window.addEventListener('load', () => {
+      initVoiceRecognition();
+      voiceButton.addEventListener('click', toggleRecording);
+
+      ttsToggleBtn.addEventListener('click', async () => {
+        ttsEnabled = !ttsEnabled;
+
+        if (ttsEnabled) {
+          ttsToggleBtn.textContent = '🔊';
+          try {
+            await connectTts();
+            startTtsFlushTimer();
+          } catch (e) {
+            console.error(e);
+          }
+        } else {
+          ttsToggleBtn.textContent = '🔇';
+          closeTts();
+        }
+      });
+
+      window.addEventListener('beforeunload', () => {
+        try { closeTts(); } catch (_) {}
+      });
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const audioFileElement = document.getElementById('audioFile');
+      if (audioFileElement) {
+        audioFileElement.addEventListener('change', (e) => {
+          const file = e.target.files[0];
+          if (file) {
+            const label = document.querySelector('.file-label');
+            if (label) label.textContent = `📁 ${file.name}`;
+          }
+        });
+      }
+
+      const audioScoringModal = document.getElementById('audioScoringModal');
+      if (audioScoringModal) {
+        audioScoringModal.addEventListener('click', (e) => {
+          if (e.target === audioScoringModal) closeAudioScoringModal();
+        });
+      }
+
+      const scoreVoiceModal = document.getElementById('scoreVoiceModal');
+      if (scoreVoiceModal) {
+        scoreVoiceModal.addEventListener('click', (e) => {
+          if (e.target === scoreVoiceModal) closeScoreVoiceModal();
+        });
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>mao-demo</title>
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #f5f7fb;
+      font-family: Arial, sans-serif;
+    }
+
+    /* ===== 页面两栏布局：左侧给小人留空间，右侧显示 PDF ===== */
+    .layout {
+      display: flex;
+      width: 100%;
+      height: 100%;
+    }
+
+    .left-stage {
+      flex: 0 0 40%;
+      position: relative;
+      height: 100%;
+      background: transparent;
+      overflow: hidden;
+    }
+
+    .right-pdf {
+      flex: 1;
+      height: 100%;
+      background: #ffffff;
+      border-left: 1px solid rgba(0,0,0,0.08);
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ===== 右侧顶部：上传区 ===== */
+    .pdf-header {
+      flex: 0 0 auto;
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid rgba(0,0,0,0.08);
+      background: linear-gradient(180deg, #ffffff, #fafafa);
+    }
+
+    .upload-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #2b6ef3;
+      color: #fff;
+      padding: 10px 14px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 700;
+      user-select: none;
+    }
+
+    .upload-btn:hover {
+      filter: brightness(0.95);
+    }
+
+    .upload-btn input {
+      display: none;
+    }
+
+    .pdf-hint {
+      color: #555;
+      font-size: 13px;
+    }
+
+    .pdf-name {
+      margin-left: auto;
+      color: #222;
+      font-size: 13px;
+      max-width: 45%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* ===== PDF 预览区域 ===== */
+    .pdf-viewer-wrap {
+      flex: 1;
+      position: relative;
+      background: #fff;
+    }
+
+    iframe#pdfFrame {
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: #fff;
+    }
+
+    /* ===== 小人容器（放在左侧区域内）===== */
+    #oml2d-container {
+      position: absolute;   /* 让它在左侧区域内定位 */
+      left: 10px;
+      bottom: 10px;
+      z-index: 9999;
+      pointer-events: auto;
+    }
+
+    /* 可选：让 hit area 红框不至于太刺眼 */
+    /* .oml2d-hit-area-frame { opacity: 0.6; } */
+
+    /* 对话按钮样式 */
+    .chat-link-btn {
+      position: fixed;
+      top: 14px;
+      left: 14px;
+      z-index: 10000;
+      background: linear-gradient(135deg, #4CAF50, #45a049);
+      color: #fff;
+      padding: 8px 14px;
+      border-radius: 18px;
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 700;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      user-select: none;
+    }
+    .chat-link-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 14px rgba(0,0,0,0.30);
+    }
+  </style>
+</head>
+
+<body>
+  <a href="chat_interface.html" class="chat-link-btn" target="_blank">
+    对话界面
+  </a>
+
+  <div class="layout">
+    <!-- 左侧：小人区域 -->
+    <div class="left-stage">
+      <!-- 载入 live2d -->
+      <script src="packages/oh-my-live2d/dist/index.min.js"></script>
+    </div>
+
+    <!-- 右侧：PDF 教案显示区域 -->
+    <div class="right-pdf">
+      <div class="pdf-header">
+        <label class="upload-btn">
+          📄 请上传你的 PDF 教案
+          <input id="pdfInput" type="file" accept="application/pdf" />
+        </label>
+
+        <div class="pdf-hint">上传后将直接在右侧预览（支持滚动/缩放）。</div>
+        <div class="pdf-name" id="pdfName">未选择文件</div>
+      </div>
+
+      <div class="pdf-viewer-wrap">
+        <!-- 默认空白，可替换成提示页 -->
+        <iframe id="pdfFrame" title="PDF Viewer"></iframe>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ====== 1) 初始化 Live2D（基本沿用你原来的配置） ======
+    const oml2d = OML2D.loadOml2d({
+      importType: 'cubism5',
+      models: [
+        {
+          path: 'mao_pro_en/runtime/mao_pro.model3.json',
+          scale: 0.10,
+          position: [0, 0],
+          showHitAreaFrames: true,
+          motionPreloadStrategy: 'ALL'
+        }
+      ],
+      debug: true,
+      tips: {
+        welcomeTips: { duration: 0, priority: 0 },
+        idleTips: { duration: 0, priority: 0 }
+      }
+    });
+
+    oml2d.onStageSlideIn(() => {
+      console.log('mao 模型加载成功');
+    });
+
+    // ====== 2) PDF 上传 + 页面内预览 ======
+    const input = document.getElementById('pdfInput');
+    const frame = document.getElementById('pdfFrame');
+    const nameEl = document.getElementById('pdfName');
+
+    let currentObjectUrl = null;
+
+    input.addEventListener('change', () => {
+      const file = input.files && input.files[0];
+      if (!file) return;
+
+      if (file.type !== 'application/pdf') {
+        alert('请选择 PDF 文件。');
+        input.value = '';
+        return;
+      }
+
+      // 释放旧的 URL，避免内存泄漏
+      if (currentObjectUrl) {
+        URL.revokeObjectURL(currentObjectUrl);
+        currentObjectUrl = null;
+      }
+
+      currentObjectUrl = URL.createObjectURL(file);
+      nameEl.textContent = file.name;
+
+      // 一些浏览器支持 PDF 内置查看器；加 #toolbar 等参数可控制显示
+      frame.src = currentObjectUrl + '#toolbar=1&navpanes=0&view=FitH';
+    });
+
+    // 可选：离开页面时释放 URL
+    window.addEventListener('beforeunload', () => {
+      if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
+    });
+  </script>
+</body>
+</html>
