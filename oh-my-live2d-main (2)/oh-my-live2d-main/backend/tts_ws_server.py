@@ -8,6 +8,7 @@ import dashscope
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
+# ============= 基础配置 =============
 def _load_env_file():
     here = os.path.abspath(os.path.dirname(__file__))
     candidates = [
@@ -15,7 +16,6 @@ def _load_env_file():
         os.path.join(os.path.dirname(here), ".env"),
         os.path.join(os.getcwd(), ".env"),
     ]
-
     for path in candidates:
         if not os.path.isfile(path):
             continue
@@ -23,11 +23,7 @@ def _load_env_file():
             with open(path, "r", encoding="utf-8") as f:
                 for raw in f:
                     line = raw.strip()
-                    if not line:
-                        continue
-                    if line.startswith("#"):
-                        continue
-                    if "=" not in line:
+                    if not line or line.startswith("#") or "=" not in line:
                         continue
                     key, value = line.split("=", 1)
                     key = key.strip()
@@ -40,6 +36,7 @@ def _load_env_file():
 
 
 _load_env_file()
+
 dashscope.base_http_api_url = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/api/v1")
 DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY")  # 必须配置
 
@@ -47,9 +44,8 @@ DEFAULT_MODEL = os.getenv("DASHSCOPE_TTS_MODEL", "qwen3-tts-flash")
 DEFAULT_VOICE = os.getenv("DASHSCOPE_TTS_VOICE", "Cherry")
 DEFAULT_LANG  = os.getenv("DASHSCOPE_TTS_LANG", "Chinese")
 
-# 为了避免“提交过短导致效果差/请求频繁”，这里保留最小长度限制
+# 非流式合成：为了避免“提交过短导致效果差/请求频繁”，这里保留最小长度限制
 MIN_CHARS_PER_REQ = int(os.getenv("TTS_MIN_CHARS_PER_REQ", "24"))
-PLAYBACK_ACK_TIMEOUT_SEC = float(os.getenv("TTS_PLAYBACK_ACK_TIMEOUT_SEC", "20"))
 
 app = FastAPI()
 
@@ -96,6 +92,18 @@ def _extract_audio_meta(resp: Any) -> Dict[str, Any]:
     if data:
         meta["data"] = data  # 可选：不推荐前端用它播放（体积大），但留作排障
     return meta
+
+
+def _extract_audio_delta(resp: Any) -> Optional[str]:
+    out = _safe_get(resp, "output", default=None)
+    audio = _safe_get(out, "audio", default=None)
+    delta = _safe_get(audio, "delta", default=None)
+    if delta:
+        return str(delta)
+    data = _safe_get(audio, "data", default=None)
+    if data:
+        return str(data)
+    return None
 
 
 def _normalize_text(text: str) -> str:
@@ -161,9 +169,9 @@ async def _dashscope_tts_stream(text: str, model: str, voice: str, language_type
     loop = asyncio.get_running_loop()
     q: asyncio.Queue[Any] = asyncio.Queue(maxsize=64)
 
-    def _run():
+    def _worker():
         try:
-            resp_iter = dashscope.MultiModalConversation.call(
+            responses = dashscope.MultiModalConversation.call(
                 api_key=DASHSCOPE_API_KEY,
                 model=model,
                 text=text,
@@ -171,16 +179,13 @@ async def _dashscope_tts_stream(text: str, model: str, voice: str, language_type
                 language_type=language_type,
                 stream=True,
             )
-
-            for chunk in resp_iter:
-                fut = asyncio.run_coroutine_threadsafe(q.put(chunk), loop)
-                fut.result()
+            for resp in responses:
+                loop.call_soon_threadsafe(q.put_nowait, resp)
+            loop.call_soon_threadsafe(q.put_nowait, None)
         except Exception as e:
-            asyncio.run_coroutine_threadsafe(q.put(e), loop).result()
-        finally:
-            asyncio.run_coroutine_threadsafe(q.put(None), loop).result()
+            loop.call_soon_threadsafe(q.put_nowait, e)
 
-    threading.Thread(target=_run, daemon=True).start()
+    threading.Thread(target=_worker, daemon=True).start()
 
     while True:
         item = await q.get()
@@ -191,33 +196,10 @@ async def _dashscope_tts_stream(text: str, model: str, voice: str, language_type
         yield item
 
 
-
 class SessionState:
     def __init__(self):
         self.text_buf: str = ""
         self.closed: bool = False
-        self.commit_seq: int = 0
-        self.commit_q: asyncio.Queue[Any] = asyncio.Queue()
-        self.segment_seq: int = 0
-        self.ready_q: asyncio.Queue[Any] = asyncio.Queue()
-        self.playback_ready: asyncio.Event = asyncio.Event()
-        self.playing_segment_id: Optional[int] = None
-        self.playback_timeout_task: Optional[asyncio.Task] = None
-        self.worker_task: Optional[asyncio.Task] = None
-        self.sender_task: Optional[asyncio.Task] = None
-
-
-def _extract_audio_data(resp: Any) -> Optional[str]:
-    out = _safe_get(resp, "output", default=None)
-    audio = _safe_get(out, "audio", default=None)
-    data = _safe_get(audio, "data", default=None)
-    return data if isinstance(data, str) and data else None
-
-
-def _extract_finish_reason(resp: Any) -> Optional[str]:
-    out = _safe_get(resp, "output", default=None)
-    finish_reason = _safe_get(out, "finish_reason", default=None)
-    return finish_reason if isinstance(finish_reason, str) and finish_reason else None
 
 
 @app.websocket("/ws/tts")
@@ -225,15 +207,9 @@ async def ws_tts(ws: WebSocket):
     """
     前端协议（兼容你当前写法）：
     - {type:"input_text_buffer.append", text:"..."}   # 只缓冲
-    - {type:"input_text_buffer.commit"}              # 触发合成
+    - {type:"input_text_buffer.commit"}              # 触发一次性合成（非流式）
     - {type:"session.finish"}                        # 关闭
-    返回：
-    - session.ready
-    - response.audio.delta  (delta: base64 pcm16 @ 24k)
-    - response.audio.meta   (meta: {url, expires_at, data?})
-    - response.segment.done (每段结束)
-    - response.done         (本次 commit 全部结束)
-    - error
+    返回：session.ready / response.audio.delta / response.segment.done / response.done / error
     """
     await ws.accept()
 
@@ -257,107 +233,8 @@ async def ws_tts(ws: WebSocket):
         "model": model,
         "voice": voice,
         "language_type": language_type,
-        "mode": "streaming"
+        "mode": "streaming_pcm"
     }, ensure_ascii=False))
-
-    async def _send(obj: Dict[str, Any]):
-        await ws.send_text(json.dumps(obj, ensure_ascii=False))
-
-    async def _auto_release(segment_id: int, timeout_sec: float):
-        try:
-            await asyncio.sleep(timeout_sec)
-            if state.playing_segment_id == segment_id and not state.playback_ready.is_set():
-                state.playback_ready.set()
-        except asyncio.CancelledError:
-            return
-
-    async def _sender_worker():
-        try:
-            while True:
-                item = await state.ready_q.get()
-                if item is None:
-                    break
-
-                await state.playback_ready.wait()
-                if state.closed:
-                    break
-
-                state.playback_ready.clear()
-
-                commit_id = item.get("commit_id")
-                segment_id = item.get("segment_id")
-                deltas = item.get("deltas") or []
-                is_last_in_commit = bool(item.get("is_last_in_commit"))
-
-                state.playing_segment_id = segment_id
-                if state.playback_timeout_task:
-                    try:
-                        state.playback_timeout_task.cancel()
-                    except Exception:
-                        pass
-                    state.playback_timeout_task = None
-
-                for delta in deltas:
-                    await _send({
-                        "type": "response.audio.delta",
-                        "delta": delta,
-                        "commit_id": commit_id,
-                        "segment_id": segment_id,
-                    })
-
-                await _send({
-                    "type": "response.segment.done",
-                    "commit_id": commit_id,
-                    "segment_id": segment_id,
-                })
-
-                if is_last_in_commit:
-                    await _send({"type": "response.done", "commit_id": commit_id})
-
-                if segment_id is not None and PLAYBACK_ACK_TIMEOUT_SEC > 0:
-                    state.playback_timeout_task = asyncio.create_task(
-                        _auto_release(int(segment_id), PLAYBACK_ACK_TIMEOUT_SEC)
-                    )
-
-        except Exception as e:
-            await _send({"type": "error", "error": f"TTS sender failed: {repr(e)}"})
-
-    async def _commit_worker():
-        try:
-            while True:
-                item = await state.commit_q.get()
-                if item is None:
-                    break
-
-                commit_id, parts = item
-
-                for idx, seg in enumerate(parts):
-                    deltas: list[str] = []
-                    state.segment_seq += 1
-                    segment_id = state.segment_seq
-
-                    async for chunk in _dashscope_tts_stream(seg, model, voice, language_type):
-                        data = _extract_audio_data(chunk)
-                        if data:
-                            deltas.append(data)
-
-                        finish_reason = _extract_finish_reason(chunk)
-                        if finish_reason == "stop":
-                            pass
-
-                    await state.ready_q.put({
-                        "commit_id": commit_id,
-                        "segment_id": segment_id,
-                        "deltas": deltas,
-                        "is_last_in_commit": (idx == len(parts) - 1),
-                    })
-
-        except Exception as e:
-            await _send({"type": "error", "error": f"TTS worker failed: {repr(e)}"})
-
-    state.playback_ready.set()
-    state.sender_task = asyncio.create_task(_sender_worker())
-    state.worker_task = asyncio.create_task(_commit_worker())
 
     try:
         while True:
@@ -374,70 +251,60 @@ async def ws_tts(ws: WebSocket):
                 state.text_buf = ""
 
                 if not text:
-                    await _send({"type": "error", "error": "Empty text buffer on commit"})
+                    await ws.send_text(json.dumps({
+                        "type": "error",
+                        "error": "Empty text buffer on commit"
+                    }, ensure_ascii=False))
                     continue
 
                 parts = _split_text_for_tts(text)
-                if not parts:
-                    await _send({"type": "error", "error": "Empty text after split"})
-                    continue
 
-                state.commit_seq += 1
-                await state.commit_q.put((state.commit_seq, parts))
+                for seg in parts:
+                    try:
+                        saw_audio = False
+                        async for resp in _dashscope_tts_stream(seg, model, voice, language_type):
+                            delta = _extract_audio_delta(resp)
+                            if not delta:
+                                continue
+                            saw_audio = True
+                            await ws.send_text(json.dumps({
+                                "type": "response.audio.delta",
+                                "delta": delta,
+                            }, ensure_ascii=False))
 
-            elif mtype == "audio.playback.ended":
-                sid = msg.get("segment_id", None)
-                if sid is None or sid == state.playing_segment_id:
-                    if state.playback_timeout_task:
-                        try:
-                            state.playback_timeout_task.cancel()
-                        except Exception:
-                            pass
-                        state.playback_timeout_task = None
-                    state.playing_segment_id = None
-                    state.playback_ready.set()
+                        if not saw_audio:
+                            await ws.send_text(json.dumps({
+                                "type": "error",
+                                "error": "TTS returned no audio delta",
+                            }, ensure_ascii=False))
+
+                        await ws.send_text(json.dumps({
+                            "type": "response.segment.done"
+                        }, ensure_ascii=False))
+
+                    except Exception as e:
+                        await ws.send_text(json.dumps({
+                            "type": "error",
+                            "error": f"TTS failed: {repr(e)}"
+                        }, ensure_ascii=False))
+
+                await ws.send_text(json.dumps({
+                    "type": "response.done"
+                }, ensure_ascii=False))
 
             elif mtype == "session.finish":
                 state.closed = True
                 break
 
             else:
-                await _send({"type": "error", "error": f"Unknown message type: {mtype}"})
+                await ws.send_text(json.dumps({
+                    "type": "error",
+                    "error": f"Unknown message type: {mtype}"
+                }, ensure_ascii=False))
 
     except WebSocketDisconnect:
         state.closed = True
     finally:
-        try:
-            await state.commit_q.put(None)
-        except Exception:
-            pass
-        try:
-            await state.ready_q.put(None)
-        except Exception:
-            pass
-        try:
-            if state.playback_timeout_task:
-                state.playback_timeout_task.cancel()
-        except Exception:
-            pass
-        try:
-            if state.worker_task:
-                await asyncio.wait_for(state.worker_task, timeout=3)
-        except Exception:
-            try:
-                if state.worker_task:
-                    state.worker_task.cancel()
-            except Exception:
-                pass
-        try:
-            if state.sender_task:
-                await asyncio.wait_for(state.sender_task, timeout=3)
-        except Exception:
-            try:
-                if state.sender_task:
-                    state.sender_task.cancel()
-            except Exception:
-                pass
         try:
             await ws.close()
         except Exception:
