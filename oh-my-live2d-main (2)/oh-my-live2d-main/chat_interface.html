@@ -517,6 +517,7 @@
     // 流式 TTS：ws://localhost:8004/ws/tts
     // =========================
     const TTS_WS_URL = `ws://localhost:8004/ws/tts?voice=Cherry&model=qwen3-tts-flash&language_type=Chinese`;
+    const TTS_COMMIT_MIN_CHARS = 12;
 
     let ttsEnabled = false;
     let ttsSocket = null;
@@ -557,6 +558,10 @@
 
       async ensureRunning() {
         if (this.ctx.state !== "running") await this.ctx.resume();
+      }
+
+      getScheduledEndTimeSec() {
+        return this.nextTime || this.ctx.currentTime;
       }
 
       resetSchedule() {
@@ -671,14 +676,13 @@
             const int16 = base64ToInt16Array(msg.delta);
             ttsPlayer.pushPcm16(int16);
           } catch (e) {
-            console.warn("[TTS] delta decode failed, will rely on meta.url", e);
+            console.warn("[TTS] delta decode failed", e);
           }
           return;
         }
 
-        if (msg.type === 'response.audio.meta' && msg.meta && msg.meta.url) {
-          console.log("[TTS] meta url:", msg.meta.url);
-          playTtsUrl(msg.meta.url);
+        if (msg.type === 'response.segment.done') {
+          scheduleSegmentAck(msg.segment_id);
           return;
         }
 
@@ -692,6 +696,10 @@
       try {
         if (ttsReconnectTimer) { clearTimeout(ttsReconnectTimer); ttsReconnectTimer = null; }
         if (ttsFlushTimer) { clearInterval(ttsFlushTimer); ttsFlushTimer = null; }
+        try {
+          for (const t of ttsSegmentAckTimers.values()) clearTimeout(t);
+          ttsSegmentAckTimers.clear();
+        } catch (_) {}
         if (ttsSocket && ttsSocket.readyState === WebSocket.OPEN) {
           try { ttsSocket.send(JSON.stringify({ type: "session.finish" })); } catch (_) {}
           ttsSocket.close();
@@ -699,42 +707,35 @@
       } catch (_) {}
       ttsSocket = null;
       ttsTextBuf = '';
-      ttsUrlQueue = [];
-      ttsUrlPlaying = false;
       if (ttsAudioEl) {
         ttsAudioEl.pause();
         ttsAudioEl = null;
       }
     }
+    let ttsSegmentAckTimers = new Map();
 
-    let ttsUrlQueue = [];
-    let ttsUrlPlaying = false;
-
-    function playNextTtsUrl() {
-      if (!ttsAudioEl) return;
-      const nextUrl = ttsUrlQueue.shift();
-      if (!nextUrl) {
-        ttsUrlPlaying = false;
-        return;
-      }
-      ttsUrlPlaying = true;
-      ttsAudioEl.src = nextUrl;
-      ttsAudioEl.play().catch(err => {
-        console.warn("[TTS] audio play blocked:", err);
-        setTimeout(playNextTtsUrl, 150);
-      });
+    function sendPlaybackEnded(segmentId) {
+      try {
+        if (!ttsEnabled) return;
+        if (!ttsSocket || ttsSocket.readyState !== WebSocket.OPEN) return;
+        ttsSocket.send(JSON.stringify({ type: "audio.playback.ended", segment_id: segmentId ?? null }));
+      } catch (_) {}
     }
 
-    function playTtsUrl(url) {
-      if (!url) return;
-      if (!ttsAudioEl) {
-        ttsAudioEl = new Audio();
-        ttsAudioEl.preload = "auto";
-        ttsAudioEl.onended = () => playNextTtsUrl();
-        ttsAudioEl.onerror = () => playNextTtsUrl();
-      }
-      ttsUrlQueue.push(url);
-      if (!ttsUrlPlaying) playNextTtsUrl();
+    function scheduleSegmentAck(segmentId) {
+      try {
+        if (!segmentId) return;
+        if (!ttsPlayer) return;
+        if (ttsSegmentAckTimers.has(segmentId)) return;
+
+        const endSec = ttsPlayer.getScheduledEndTimeSec();
+        const delayMs = Math.max(0, (endSec - ttsPlayer.ctx.currentTime) * 1000 + 30);
+        const timer = setTimeout(() => {
+          ttsSegmentAckTimers.delete(segmentId);
+          sendPlaybackEnded(segmentId);
+        }, delayMs);
+        ttsSegmentAckTimers.set(segmentId, timer);
+      } catch (_) {}
     }
 
     function ttsAppendText(text) {
@@ -750,15 +751,22 @@
       ttsSocket.send(JSON.stringify({ type: "input_text_buffer.commit" }));
     }
 
+    function ttsFlushNow() {
+      if (!ttsEnabled) return;
+      if (!ttsTextBuf || !ttsTextBuf.trim()) return;
+      ttsAppendText(ttsTextBuf);
+      ttsCommit();
+      ttsTextBuf = '';
+    }
+
     // ======== 关键修复 3：别用 180ms/10字，把“段”搞得太碎 ========
     function startTtsFlushTimer() {
       if (ttsFlushTimer) return;
       ttsFlushTimer = setInterval(() => {
         if (!ttsEnabled) return;
         if (!ttsTextBuf) return;
-        // 定时 flush：即使没等到标点也发出去
-        ttsAppendText(ttsTextBuf);
-        ttsTextBuf = '';
+        if (ttsTextBuf.length < TTS_COMMIT_MIN_CHARS) return;
+        ttsFlushNow();
       }, 450); // 建议 450ms（与你后端 FLUSH_INTERVAL_MS 默认一致）
     }
 
@@ -769,11 +777,10 @@
       ttsTextBuf += delta;
 
       const shouldFlush =
-        /[。！？!?；;，,\n]/.test(ttsTextBuf) || ttsTextBuf.length >= 24; // 24字更稳，配合后端 MIN_CHARS_PER_REQ
+        /[。！？!?；;，,\n]/.test(ttsTextBuf) || ttsTextBuf.length >= TTS_COMMIT_MIN_CHARS;
 
       if (shouldFlush) {
-        ttsAppendText(ttsTextBuf);
-        ttsTextBuf = '';
+        ttsFlushNow();
       }
     }
 
@@ -1346,11 +1353,7 @@
 
         // 收尾：把尾巴 flush + commit
         if (ttsEnabled) {
-          if (ttsTextBuf.trim()) {
-            ttsAppendText(ttsTextBuf);
-            ttsTextBuf = '';
-          }
-          ttsCommit();
+          ttsFlushNow();
         }
 
       } catch (e) {
