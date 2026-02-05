@@ -4,7 +4,6 @@ import json
 from http import HTTPStatus
 from typing import Any, Dict, List, Optional
 
-from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -12,8 +11,38 @@ from pydantic import BaseModel, Field
 
 from dashscope import Application
 
-# ---------- env ----------
-load_dotenv()  # 读取同目录 .env（或工作目录的 .env）
+def _load_env_file():
+    here = os.path.abspath(os.path.dirname(__file__))
+    candidates = [
+        os.path.join(here, ".env"),
+        os.path.join(os.path.dirname(here), ".env"),
+        os.path.join(os.getcwd(), ".env"),
+    ]
+
+    for path in candidates:
+        if not os.path.isfile(path):
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                for raw in f:
+                    line = raw.strip()
+                    if not line:
+                        continue
+                    if line.startswith("#"):
+                        continue
+                    if "=" not in line:
+                        continue
+                    key, value = line.split("=", 1)
+                    key = key.strip()
+                    value = value.strip().strip('"').strip("'")
+                    if key and key not in os.environ:
+                        os.environ[key] = value
+        except Exception:
+            pass
+        break
+
+
+_load_env_file()
 
 DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY")
 if not DASHSCOPE_API_KEY:
