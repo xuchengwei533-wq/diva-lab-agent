@@ -1,7 +1,7 @@
-# tts_ws_server.py (NON-STREAMING VERSION)
 import os
 import json
 import asyncio
+import threading
 from typing import Any, Dict, Optional
 
 import dashscope
@@ -9,6 +9,34 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 # ============= 基础配置 =============
+def _load_env_file():
+    here = os.path.abspath(os.path.dirname(__file__))
+    candidates = [
+        os.path.join(here, ".env"),
+        os.path.join(os.path.dirname(here), ".env"),
+        os.path.join(os.getcwd(), ".env"),
+    ]
+    for path in candidates:
+        if not os.path.isfile(path):
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                for raw in f:
+                    line = raw.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    key, value = line.split("=", 1)
+                    key = key.strip()
+                    value = value.strip().strip('"').strip("'")
+                    if key and key not in os.environ:
+                        os.environ[key] = value
+        except Exception:
+            pass
+        break
+
+
+_load_env_file()
+
 dashscope.base_http_api_url = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/api/v1")
 DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY")  # 必须配置
 
@@ -64,6 +92,18 @@ def _extract_audio_meta(resp: Any) -> Dict[str, Any]:
     if data:
         meta["data"] = data  # 可选：不推荐前端用它播放（体积大），但留作排障
     return meta
+
+
+def _extract_audio_delta(resp: Any) -> Optional[str]:
+    out = _safe_get(resp, "output", default=None)
+    audio = _safe_get(out, "audio", default=None)
+    delta = _safe_get(audio, "delta", default=None)
+    if delta:
+        return str(delta)
+    data = _safe_get(audio, "data", default=None)
+    if data:
+        return str(data)
+    return None
 
 
 def _normalize_text(text: str) -> str:
@@ -125,6 +165,37 @@ async def _dashscope_tts_nonstream(text: str, model: str, voice: str, language_t
     return await asyncio.to_thread(_run)
 
 
+async def _dashscope_tts_stream(text: str, model: str, voice: str, language_type: str):
+    loop = asyncio.get_running_loop()
+    q: asyncio.Queue[Any] = asyncio.Queue(maxsize=64)
+
+    def _worker():
+        try:
+            responses = dashscope.MultiModalConversation.call(
+                api_key=DASHSCOPE_API_KEY,
+                model=model,
+                text=text,
+                voice=voice,
+                language_type=language_type,
+                stream=True,
+            )
+            for resp in responses:
+                loop.call_soon_threadsafe(q.put_nowait, resp)
+            loop.call_soon_threadsafe(q.put_nowait, None)
+        except Exception as e:
+            loop.call_soon_threadsafe(q.put_nowait, e)
+
+    threading.Thread(target=_worker, daemon=True).start()
+
+    while True:
+        item = await q.get()
+        if item is None:
+            break
+        if isinstance(item, Exception):
+            raise item
+        yield item
+
+
 class SessionState:
     def __init__(self):
         self.text_buf: str = ""
@@ -138,12 +209,7 @@ async def ws_tts(ws: WebSocket):
     - {type:"input_text_buffer.append", text:"..."}   # 只缓冲
     - {type:"input_text_buffer.commit"}              # 触发一次性合成（非流式）
     - {type:"session.finish"}                        # 关闭
-    返回：
-    - session.ready
-    - response.audio.meta   (meta: {url, expires_at, data?})
-    - response.segment.done (每段结束)
-    - response.done         (本次 commit 全部结束)
-    - error
+    返回：session.ready / response.audio.delta / response.segment.done / response.done / error
     """
     await ws.accept()
 
@@ -167,7 +233,7 @@ async def ws_tts(ws: WebSocket):
         "model": model,
         "voice": voice,
         "language_type": language_type,
-        "mode": "non_streaming"
+        "mode": "streaming_pcm"
     }, ensure_ascii=False))
 
     try:
@@ -191,28 +257,25 @@ async def ws_tts(ws: WebSocket):
                     }, ensure_ascii=False))
                     continue
 
-                # 可选：按句切段，逐段合成并逐段播放（仍然是“非流式合成”，只是多次请求）
                 parts = _split_text_for_tts(text)
 
                 for seg in parts:
                     try:
-                        resp = await _dashscope_tts_nonstream(seg, model, voice, language_type)
-                        meta = _extract_audio_meta(resp)
+                        saw_audio = False
+                        async for resp in _dashscope_tts_stream(seg, model, voice, language_type):
+                            delta = _extract_audio_delta(resp)
+                            if not delta:
+                                continue
+                            saw_audio = True
+                            await ws.send_text(json.dumps({
+                                "type": "response.audio.delta",
+                                "delta": delta,
+                            }, ensure_ascii=False))
 
-                        if not meta.get("url") and not meta.get("data"):
-                            # 返回里找不到音频信息，直接把原响应结构（裁剪）回传便于排障
+                        if not saw_audio:
                             await ws.send_text(json.dumps({
                                 "type": "error",
-                                "error": "TTS returned no audio url/data",
-                                "debug": {
-                                    "has_output": bool(_safe_get(resp, "output", default=None)),
-                                    "finish_reason": _safe_get(_safe_get(resp, "output", default=None), "finish_reason", default=None),
-                                }
-                            }, ensure_ascii=False))
-                        else:
-                            await ws.send_text(json.dumps({
-                                "type": "response.audio.meta",
-                                "meta": meta
+                                "error": "TTS returned no audio delta",
                             }, ensure_ascii=False))
 
                         await ws.send_text(json.dumps({
