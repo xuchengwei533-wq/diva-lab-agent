@@ -2,11 +2,14 @@ import os
 import json
 import asyncio
 import threading
+import base64
+import urllib.request
 from typing import Any, Dict, Optional
 
 import dashscope
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 
 # ============= 基础配置 =============
 def _load_env_file():
@@ -56,6 +59,52 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+VOICE_TYPE_TO_VOICE = {
+    "cute": "Cherry",
+    "lively": "Serena",
+    "gentle": "Chelsie",
+    "calm": "Ethan",
+    "fast": "Cherry",
+    "slow": "Chelsie",
+    "mao": "Cherry",
+}
+
+
+class TTSSpeakRequest(BaseModel):
+    text: str = Field(..., min_length=1)
+    voice_type: Optional[str] = Field(default="cute")
+
+
+def _download_to_base64(url: str) -> str:
+    with urllib.request.urlopen(url, timeout=60) as resp:
+        content = resp.read()
+    if not content:
+        raise RuntimeError("Empty audio content downloaded")
+    return base64.b64encode(content).decode("utf-8")
+
+
+@app.post("/api/tts/speak")
+async def speak(req: TTSSpeakRequest) -> Dict[str, Any]:
+    if not DASHSCOPE_API_KEY:
+        raise HTTPException(status_code=500, detail="DASHSCOPE_API_KEY not set in environment")
+
+    text = (req.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Empty text")
+
+    voice_type = (req.voice_type or "").strip().lower() or "cute"
+    voice = VOICE_TYPE_TO_VOICE.get(voice_type) or (req.voice_type or DEFAULT_VOICE)
+
+    resp = await _dashscope_tts_nonstream(text, DEFAULT_MODEL, voice, DEFAULT_LANG)
+    meta = _extract_audio_meta(resp)
+    if meta.get("data"):
+        return {"success": True, "audio_base64": str(meta["data"])}
+    if meta.get("url"):
+        audio_base64 = await asyncio.to_thread(_download_to_base64, str(meta["url"]))
+        return {"success": True, "audio_base64": audio_base64}
+
+    raise HTTPException(status_code=500, detail="TTS returned no audio data/url")
 
 
 def _safe_get(d: Any, *keys, default=None):

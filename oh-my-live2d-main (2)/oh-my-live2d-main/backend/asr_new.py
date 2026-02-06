@@ -24,7 +24,7 @@ import math
 from array import array
 from typing import Any, Dict, Optional, Tuple, Callable
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -99,6 +99,11 @@ class VoiceStartRequest(BaseModel):
     audio_data: Optional[str] = Field(default=None, description="Base64 of PCM bytes")
     audio_base64: Optional[str] = Field(default=None, description="Base64 of PCM bytes")
     audio_format: Optional[str] = Field(default="pcm16le_16k_mono")
+
+
+class ASRRecognizeRequest(BaseModel):
+    audio_base64: str
+    model: Optional[str] = Field(default=None, description="Preferred DashScope ASR model name")
 
 
 # =========================
@@ -283,7 +288,7 @@ def _extract_text_from_resp(resp: Any) -> str:
 # =========================
 # DashScope ASR
 # =========================
-def _dashscope_asr(wav_path: str) -> Tuple[str, Dict[str, Any]]:
+def _dashscope_asr(wav_path: str, preferred_model: Optional[str] = None) -> Tuple[str, Dict[str, Any]]:
     if Recognition is None or dashscope is None:
         raise HTTPException(status_code=500, detail="dashscope not installed. pip install dashscope")
 
@@ -300,7 +305,7 @@ def _dashscope_asr(wav_path: str) -> Tuple[str, Dict[str, Any]]:
     last_meta: Dict[str, Any] = {}
 
     model_candidates: list[str] = []
-    for m in ("paraformer-realtime-v1", DASHSCOPE_ASR_MODEL, DASHSCOPE_ASR_FALLBACK_MODEL):
+    for m in (preferred_model, "paraformer-realtime-v1", DASHSCOPE_ASR_MODEL, DASHSCOPE_ASR_FALLBACK_MODEL):
         m = (m or "").strip()
         if not m:
             continue
@@ -481,6 +486,91 @@ def start_voice(req: VoiceStartRequest) -> Dict[str, Any]:
     except Exception as e:
         _set_error(str(e))
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/asr/recognize")
+def recognize_audio(req: ASRRecognizeRequest) -> Dict[str, Any]:
+    b64 = (req.audio_base64 or "").strip()
+    if not b64:
+        raise HTTPException(status_code=400, detail="Missing audio_base64")
+
+    try:
+        pcm_bytes = _decode_base64_to_bytes(b64)
+        audio_info = _pcm_stats(pcm_bytes)
+        wav_path = _pcm_bytes_to_wav_file(pcm_bytes)
+        try:
+            text, _meta = _dashscope_asr(wav_path, preferred_model=req.model)
+        finally:
+            try:
+                os.remove(wav_path)
+            except Exception:
+                pass
+        text = (text or "").strip()
+        return {"success": True, "text": text, "debug": {"audio": audio_info}}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.websocket("/ws/asr")
+async def websocket_asr(ws: WebSocket):
+    await ws.accept()
+    try:
+        import asyncio
+
+        while True:
+            raw = await ws.receive_text()
+            data = json.loads(raw)
+            if data.get("type") == "audio_data":
+                audio_b64 = data.get("audio_data") or data.get("audio_base64") or ""
+                if not audio_b64:
+                    await ws.send_text(json.dumps({
+                        "type": "asr_error",
+                        "error": "Missing audio_data",
+                        "success": False,
+                    }, ensure_ascii=False))
+                    continue
+
+                try:
+                    result = await asyncio.to_thread(
+                        recognize_audio,
+                        ASRRecognizeRequest(audio_base64=audio_b64, model=data.get("model")),
+                    )
+                    await ws.send_text(json.dumps({
+                        "type": "asr_result",
+                        "text": result.get("text", ""),
+                        "success": True,
+                    }, ensure_ascii=False))
+                except Exception as e:
+                    await ws.send_text(json.dumps({
+                        "type": "asr_error",
+                        "error": str(e),
+                        "success": False,
+                    }, ensure_ascii=False))
+            else:
+                await ws.send_text(json.dumps({
+                    "type": "error",
+                    "message": "未知消息类型",
+                    "success": False,
+                }, ensure_ascii=False))
+
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        try:
+            await ws.send_text(json.dumps({
+                "type": "error",
+                "error": str(e),
+                "success": False,
+            }, ensure_ascii=False))
+        except Exception:
+            pass
+    finally:
+        try:
+            await ws.close()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
