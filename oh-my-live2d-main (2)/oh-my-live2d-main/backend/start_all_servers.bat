@@ -2,8 +2,7 @@
 setlocal EnableExtensions
 cd /d "%~dp0"
 echo ========================================
-echo 启动 Oh-My-Live2D 所有服务
-echo ========================================
+echo 启动 Oh-My-Live2D 所有服�?echo ========================================
 echo.
 
 REM 检查Python是否可用
@@ -26,25 +25,21 @@ if %errorlevel% neq 0 (
         exit /b 1
     )
 )
-echo 依赖包检查完成
-echo.
+echo 依赖包检查完�?echo.
 
-REM 检查环境变量
-if not exist .env (
-    echo 警告: 未找到 .env 文件
-    echo 请复制 .env.example 为 .env 并配置 DASHSCOPE_API_KEY
+REM 检查环境变�?if not exist .env (
+    echo 警告: 未找�?.env 文件
+    echo 请复�?.env.example �?.env 并配�?DASHSCOPE_API_KEY
     echo.
 )
 
 echo ========================================
 echo 启动服务列表:
 echo 0. 前端页面服务 (端口8000) - mao_demo/chat_interface 页面
-echo 0b. Live2D资源服务 (端口8010) - 模型/JS静态资源
-echo 0c. chat_interface 静态服务 (端口8001) - 仅提供 chat_interface.html
+echo 0b. Live2D资源服务 (端口8010) - 模型/JS静态资�?echo 0c. chat_interface 静态服�?(端口8001) - 仅提�?chat_interface.html
 echo 1. ASR服务 (端口8002) - 语音识别 (Legacy)
 echo 2. LLM聊天服务 (端口8003) - 对话生成
-echo 3. TTS服务 (端口8004) - 文本转语音
-echo 4. CAM-S评分服务 (端口8005) - 音频评分
+echo 3. TTS服务 (端口8004) - 文本转语�?echo 4. CAM-S评分服务 (端口8005) - 音频评分
 echo 5. 新版ASR服务 (端口8006) - 语音识别
 echo ========================================
 echo.
@@ -57,8 +52,8 @@ echo 正在启动 Live2D资源服务 (端口8010)...
 start "WEB-Assets-8010" cmd /k "cd /d .. & set WEB_PORT=8010 & set WEB_MODE=assets & python mao_demo_server.py"
 timeout /t 1 /nobreak >nul
 
-echo 正在启动 chat_interface 静态服务 (端口8001)...
-start "WEB-Chat-8001" cmd /k "cd /d .. & python -m http.server 8001 --bind 127.0.0.1"
+echo 正在启动 chat_interface 静态服�?(端口8001)...
+start "WEB-Chat-8001" cmd /k "cd /d .. & set WEB_PORT=8001 & set WEB_MODE=page & python mao_demo_server.py"
 timeout /t 1 /nobreak >nul
 
 echo 正在启动 ASR 服务 (端口8002)...
@@ -103,5 +98,5 @@ echo - 新版ASR: http://localhost:8006/docs
 echo ========================================
 echo.
 echo 注意: 请保持这些命令行窗口打开
-echo 按任意键关闭此窗口...
+echo 按任意键关闭此窗�?..
 pause >nul

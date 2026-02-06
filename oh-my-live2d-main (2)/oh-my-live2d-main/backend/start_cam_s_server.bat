@@ -25,8 +25,7 @@ if %errorlevel% neq 0 (
     )
 )
 
-echo 依赖包检查完成
-echo.
+echo 依赖包检查完�?echo.
 
 echo 正在启动CAM-S音频评分服务...
 echo 服务地址: http://localhost:8005
@@ -36,6 +35,5 @@ echo.
 python asr_server.py
 
 if %errorlevel% neq 0 (
-    echo 服务启动失败，请检查错误信息
-    pause
+    echo 服务启动失败，请检查错误信�?    pause
 )

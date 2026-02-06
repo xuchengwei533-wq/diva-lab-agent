@@ -25,13 +25,11 @@ if %errorlevel% neq 0 (
     )
 )
 
-echo 依赖包检查完成
-echo.
+echo 依赖包检查完�?echo.
 
-REM 检查环境变量
-if not exist .env (
-    echo 警告: 未找到 .env 文件
-    echo 请复制 .env.example 为 .env 并配置 DASHSCOPE_API_KEY
+REM 检查环境变�?if not exist .env (
+    echo 警告: 未找�?.env 文件
+    echo 请复�?.env.example �?.env 并配�?DASHSCOPE_API_KEY
     echo.
 )
 
@@ -43,6 +41,5 @@ echo.
 python main.py
 
 if %errorlevel% neq 0 (
-    echo 服务启动失败，请检查错误信息
-    pause
+    echo 服务启动失败，请检查错误信�?    pause
 )
