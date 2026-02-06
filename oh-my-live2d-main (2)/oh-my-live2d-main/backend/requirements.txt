@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+dashscope
+pydantic
+requests
+numpy
+scipy
+pandas
+librosa
+soundfile
+numba
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.10.0+cpu
