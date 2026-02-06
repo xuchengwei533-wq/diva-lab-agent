@@ -3,7 +3,18 @@ import torch.nn as nn
 import torch
 import torch.autograd
 from torch.utils.data import Dataset, DataLoader
-from tensorboardX import SummaryWriter
+try:
+    from tensorboardX import SummaryWriter
+except Exception:
+    class SummaryWriter:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def add_scalar(self, *args, **kwargs):
+            pass
+
+        def close(self):
+            pass
 import pandas as pd
 import numpy as np
 import random
