@@ -79,7 +79,7 @@ echo "LOG_DIR=${LOG_DIR}"
 echo "logs: ${LOG_DIR}/web_8000.log ${LOG_DIR}/web_8010.log ${LOG_DIR}/web_8001.log ${LOG_DIR}/asr_legacy_8002.log ${LOG_DIR}/llm_8003.log ${LOG_DIR}/tts_8004.log ${LOG_DIR}/scoring_8005.log ${LOG_DIR}/asr_new_8006.log"
 start_bg web_8000 env WEB_PORT=8000 WEB_MODE=page "$PYTHON_BIN" mao_demo_server.py
 start_bg web_8010 env WEB_PORT=8010 WEB_MODE=assets "$PYTHON_BIN" mao_demo_server.py
-start_bg web_8001 "$PYTHON_BIN" -m http.server 8001
+start_bg web_8001 "$PYTHON_BIN" -m http.server 8001 --bind 127.0.0.1
 
 cd "$BASE/backend"
 start_bg asr_legacy_8002 "$PYTHON_BIN" main.py

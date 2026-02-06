@@ -1,4 +1,6 @@
 @echo off
+setlocal EnableExtensions
+cd /d "%~dp0"
 echo ========================================
 echo 启动 Oh-My-Live2D 所有服务
 echo ========================================
@@ -17,7 +19,7 @@ echo 检查依赖包...
 python -c "import fastapi" >nul 2>&1
 if %errorlevel% neq 0 (
     echo 检测到缺少依赖包，正在安装...
-    pip install -r requirements.txt
+    python -m pip install -r requirements.txt
     if %errorlevel% neq 0 (
         echo 依赖包安装失败，请检查网络连接和Python环境
         pause
@@ -38,6 +40,7 @@ echo ========================================
 echo 启动服务列表:
 echo 0. 前端页面服务 (端口8000) - mao_demo/chat_interface 页面
 echo 0b. Live2D资源服务 (端口8010) - 模型/JS静态资源
+echo 0c. chat_interface 静态服务 (端口8001) - 仅提供 chat_interface.html
 echo 1. ASR服务 (端口8002) - 语音识别 (Legacy)
 echo 2. LLM聊天服务 (端口8003) - 对话生成
 echo 3. TTS服务 (端口8004) - 文本转语音
@@ -52,6 +55,10 @@ timeout /t 1 /nobreak >nul
 
 echo 正在启动 Live2D资源服务 (端口8010)...
 start "WEB-Assets-8010" cmd /k "cd /d .. & set WEB_PORT=8010 & set WEB_MODE=assets & python mao_demo_server.py"
+timeout /t 1 /nobreak >nul
+
+echo 正在启动 chat_interface 静态服务 (端口8001)...
+start "WEB-Chat-8001" cmd /k "cd /d .. & python -m http.server 8001 --bind 127.0.0.1"
 timeout /t 1 /nobreak >nul
 
 echo 正在启动 ASR 服务 (端口8002)...
@@ -81,6 +88,7 @@ echo ========================================
 echo 服务地址:
 echo - Demo主页: http://localhost:8000/mao_demo.html?live2dPort=8010
 echo - 聊天界面(8000): http://localhost:8000/chat_interface.html?live2dPort=8010
+echo - 聊天界面(8001): http://localhost:8001/chat_interface.html?live2dPort=8010
 echo - Live2D资源(8010): http://localhost:8010/
 echo - ASR服务(Legacy): http://localhost:8002
 echo - LLM聊天: http://localhost:8003

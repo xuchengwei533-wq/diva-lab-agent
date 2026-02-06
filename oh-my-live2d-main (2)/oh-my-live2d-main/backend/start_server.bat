@@ -1,4 +1,6 @@
 @echo off
+setlocal EnableExtensions
+cd /d "%~dp0"
 echo 正在启动 Oh-My-Live2D ASR 服务...
 echo.
 
@@ -15,7 +17,7 @@ REM 检查依赖包
 python -c "import fastapi" >nul 2>&1
 if %errorlevel% neq 0 (
     echo 检测到缺少依赖包，正在安装...
-    pip install -r requirements.txt
+    python -m pip install -r requirements.txt
     if %errorlevel% neq 0 (
         echo 依赖包安装失败，请检查网络连接和Python环境
         pause
