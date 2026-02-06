@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>滴哇 - 聊天界面</title>
+  <script defer src="https://unpkg.com/face-api.js@0.22.2/dist/face-api.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -375,6 +376,146 @@
     .chart-bar-value { font-size: 11px; font-weight: bold; color: #333; margin-bottom: 3px; }
     .chart-y-axis { display: flex; justify-content: space-between; padding: 0 30px; font-size: 10px; color: #666; margin-top: 5px; }
     .chart-y-axis span { width: 20px; text-align: center; }
+
+    .emotion-live {
+      margin-top: 15px;
+      padding: 15px;
+      background: #f9f9f9;
+      border-radius: 8px;
+      border: 1px solid #e0e0e0;
+    }
+    .emotion-video-wrap {
+      width: 100%;
+      position: relative;
+      background: #000;
+      border-radius: 8px;
+      overflow: hidden;
+      height: 220px;
+    }
+    .emotion-video-wrap video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    #emotionVideo {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .emotion-status {
+      margin-top: 10px;
+      font-size: 12px;
+      color: #666;
+      text-align: center;
+    }
+
+    :root {
+      --kid-happy: #FFD93D;
+      --kid-voice: #4CC9F0;
+      --kid-stable: #6BCB77;
+      --kid-clear: #9D4EDD;
+      --kid-shadow: 0 8px 0 rgba(0, 0, 0, 0.12);
+      --kid-radius: 24px;
+    }
+
+    .kid-section-title {
+      font-size: 14px;
+      font-weight: 900;
+      color: #333;
+      margin: 16px 0 10px;
+    }
+
+    .kid-toy-table {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
+      width: 100%;
+    }
+
+    .kid-toy-block {
+      background: white;
+      border-radius: var(--kid-radius);
+      padding: 14px 14px 12px;
+      width: 150px;
+      min-height: 130px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      box-shadow: var(--kid-shadow);
+      transition: transform 0.2s;
+      text-align: center;
+    }
+
+    .kid-toy-block:active {
+      transform: translateY(4px);
+      box-shadow: 0 4px 0 rgba(0, 0, 0, 0.12);
+    }
+
+    .kid-toy-block.kid-blue { background: var(--kid-voice); color: white; }
+    .kid-toy-block.kid-green { background: var(--kid-stable); color: white; }
+    .kid-toy-block.kid-purple { background: var(--kid-clear); color: white; }
+
+    .kid-block-icon { font-size: 32px; margin-bottom: 8px; }
+    .kid-block-title { font-size: 14px; font-weight: 900; opacity: 0.95; }
+    .kid-block-value { font-size: 22px; font-weight: 900; margin-top: 6px; line-height: 1.2; }
+    .kid-block-sub { font-size: 11px; opacity: 0.92; margin-top: 6px; }
+
+    .kid-emotion-rainbow {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      background: white;
+      padding: 12px 16px;
+      border-radius: 40px;
+      box-shadow: var(--kid-shadow);
+      width: 100%;
+      overflow-x: auto;
+    }
+
+    .kid-emotion-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      width: 54px;
+      height: 96px;
+      position: relative;
+      flex: 0 0 auto;
+    }
+
+    .kid-emotion-bar-bg {
+      width: 18px;
+      height: 58px;
+      background: #eee;
+      border-radius: 10px;
+      position: relative;
+      overflow: hidden;
+      margin-top: auto;
+    }
+
+    .kid-emotion-bar-fill {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 0%;
+      border-radius: 10px;
+      transition: height 0.3s ease;
+    }
+
+    .kid-emotion-icon {
+      font-size: 30px;
+      margin-bottom: 8px;
+      transition: transform 0.2s;
+    }
+
+    .kid-emotion-item.active .kid-emotion-icon {
+      transform: scale(1.35);
+    }
   </style>
 </head>
 
@@ -449,6 +590,14 @@
           <button class="score-button" onclick="startScoring()">开始评分</button>
         </div>
 
+        <div class="emotion-live" id="emotionLive" style="display:none;">
+          <div class="chart-title">实时视频情感分析</div>
+          <div class="emotion-video-wrap">
+            <video id="emotionVideo" autoplay playsinline muted></video>
+          </div>
+          <div class="emotion-status" id="emotionStatus">未启动</div>
+        </div>
+
         <div class="scoring-results" id="scoringResults" style="display:none;">
           <h4>评分结果</h4>
           <div class="results-container">
@@ -456,14 +605,16 @@
               <span class="score-label">总体均分:</span>
               <span class="score-value" id="overallScore">-</span>
             </div>
-            <div class="technique-scores">
-              <div class="technique" id="techniqueScores"></div>
-            </div>
-            <div class="chart-container">
-              <div class="chart-title">演唱技巧评分详情</div>
-              <div class="chart-bars" id="chartBars"></div>
-              <div class="chart-y-axis">
-                <span>5</span><span>4</span><span>3</span><span>2</span><span>1</span><span>0</span>
+            <div class="kid-section-title">🎵 三个小积木评分</div>
+            <div class="kid-toy-table" id="techniqueScores"></div>
+
+            <div class="kid-section-title">😊 情感小彩虹</div>
+            <div class="kid-emotion-rainbow" id="emotionRainbow" style="display:none;"></div>
+
+            <div class="chart-container" id="emotionPieContainer" style="display:none;">
+              <div class="chart-title">表情情感分布</div>
+              <div style="height:260px;position:relative;">
+                <canvas id="emotionPieChart"></canvas>
               </div>
             </div>
           </div>
@@ -493,15 +644,56 @@
             </select>
           </div>
 
-          <button class="score-button" onclick="confirmScoreVoiceAndStart()">开始录音评分</button>
-          <button class="score-button" style="margin-top:10px;background:#999;" onclick="closeScoreVoiceModal()">取消</button>
+          <button class="score-button" id="scoreVoiceStartBtn" onclick="confirmScoreVoiceAndStart()">开始录音评分</button>
+          <button class="score-button" id="scoreVoiceStopBtn" style="margin-top:10px;display:none;" onclick="stopScoreRecordingFromModal()">停止录音</button>
+          <button class="score-button" id="scoreVoiceCancelBtn" style="margin-top:10px;background:#999;" onclick="closeScoreVoiceModal()">取消</button>
+        </div>
+
+        <div class="emotion-live" id="scoreEmotionLive" style="display:none;">
+          <div class="chart-title">实时视频情感分析</div>
+          <div class="emotion-video-wrap">
+            <video id="scoreEmotionVideo" autoplay playsinline muted></video>
+          </div>
+          <div class="emotion-status" id="scoreEmotionStatus">未启动</div>
+        </div>
+
+        <div class="scoring-results" id="scoreScoringResults" style="display:none;">
+          <h4>评分结果</h4>
+          <div class="results-container">
+            <div class="overall-score">
+              <span class="score-label">总体均分:</span>
+              <span class="score-value" id="scoreOverallScore">-</span>
+            </div>
+            <div class="kid-section-title">🎵 三个小积木评分</div>
+            <div class="kid-toy-table" id="scoreTechniqueScores"></div>
+
+            <div class="kid-section-title">😊 情感小彩虹</div>
+            <div class="kid-emotion-rainbow" id="scoreEmotionRainbow" style="display:none;"></div>
+
+            <div class="chart-container" id="scoreEmotionPieContainer" style="display:none;">
+              <div class="chart-title">表情情感分布</div>
+              <div style="height:260px;position:relative;">
+                <canvas id="scoreEmotionPieChart"></canvas>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   </div>
 
   <!-- live2d（可选） -->
-  <script src="packages/oh-my-live2d/dist/index.min.js"></script>
+  <script>
+    (function () {
+      const params = new URLSearchParams(location.search || '');
+      const host = (location && location.hostname) ? location.hostname : 'localhost';
+      const live2dPort = params.get('live2dPort');
+      const base = live2dPort ? `${location.protocol}//${host}:${live2dPort}` : location.origin;
+      window.__LIVE2D_ASSET_BASE__ = base;
+      document.write(`<script src="${base}/packages/oh-my-live2d/dist/index.min.js"><\/script>`);
+    })();
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.0/lame.min.js"></script>
 
   <script>
@@ -790,11 +982,12 @@
     let oml2d = null;
     try {
       if (window.OML2D) {
+        const LIVE2D_ASSET_BASE = window.__LIVE2D_ASSET_BASE__ || location.origin;
         oml2d = OML2D.loadOml2d({
           importType: 'cubism5',
           models: [
             {
-              path: 'mao_pro_en/runtime/mao_pro.model3.json',
+              path: `${LIVE2D_ASSET_BASE}/mao_pro_en/runtime/mao_pro.model3.json`,
               scale: 0.07,
               position: [0, 0],
               showHitAreaFrames: false,
@@ -807,7 +1000,11 @@
     } catch (e) {
       console.warn('Live2D 初始化失败（可忽略）:', e);
     }
-    function goBack() { window.location.href = 'mao_demo.html'; }
+    function goBack() {
+      const params = new URLSearchParams(location.search || '');
+      const live2dPort = params.get('live2dPort');
+      window.location.href = live2dPort ? `mao_demo.html?live2dPort=${encodeURIComponent(live2dPort)}` : 'mao_demo.html';
+    }
     (function bindBackClick() {
       const container = document.getElementById('oml2d-container');
       if (container) container.addEventListener('click', goBack);
@@ -820,6 +1017,7 @@
     function closeAudioScoringModal() {
       const modal = document.getElementById('audioScoringModal');
       if (modal) modal.classList.remove('active');
+      stopEmotionCapture();
     }
 
     // =========================
@@ -828,6 +1026,7 @@
     let isRecording = false;
     let mediaRecorder = null;
     let micStream = null;
+    let micInitPromise = null;
     let asrChunks = [];
     let lastRecordingWavBase64 = '';
     let scoreVoiceTypeChosen = '女高音 Soprano';
@@ -836,6 +1035,15 @@
     let scoreChunks = [];
     let lastScoreRecordingBase64 = '';
     let lastScoreRecordingFormat = 'mp3';
+    let emotionStream = null;
+    let emotionActive = false;
+    let emotionRaf = 0;
+    let emotionDetecting = false;
+    let emotionModelLoadPromise = null;
+    let emotionTotals = null;
+    let emotionFrameCount = 0;
+    let emotionCharts = {};
+    let emotionUiCurrent = { liveId: 'emotionLive', videoId: 'emotionVideo', statusId: 'emotionStatus' };
 
     const voiceButton = document.getElementById('voiceButton');
     const voiceStatus = document.getElementById('voiceStatus');
@@ -870,6 +1078,335 @@
       let binary = '';
       for (let i = 0; i < uint8Array.length; i++) binary += String.fromCharCode(uint8Array[i]);
       return btoa(binary);
+    }
+
+    function promiseWithTimeout(promise, ms, message) {
+      let timer = 0;
+      const timeoutPromise = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(message || '操作超时')), ms);
+      });
+      return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
+    }
+
+    function resetEmotionAggregation() {
+      emotionTotals = {
+        neutral: 0,
+        happy: 0,
+        sad: 0,
+        angry: 0,
+        fearful: 0,
+        disgusted: 0,
+        surprised: 0
+      };
+      emotionFrameCount = 0;
+    }
+
+    function getEmotionSummary() {
+      if (!emotionTotals || !emotionFrameCount) return null;
+      const keys = Object.keys(emotionTotals);
+      const values = keys.map(k => emotionTotals[k] / emotionFrameCount);
+      const sum = values.reduce((a, b) => a + b, 0);
+      if (!sum) return null;
+      const normalized = values.map(v => v / sum);
+      return { keys, values: normalized, frameCount: emotionFrameCount };
+    }
+
+    function renderEmotionRainbow(containerId) {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+
+      const summary = getEmotionSummary();
+      if (!summary) {
+        container.style.display = 'none';
+        return;
+      }
+
+      const meta = {
+        happy: { emoji: '😊', color: '#FFD93D', label: '开心' },
+        neutral: { emoji: '😐', color: '#A0A0A0', label: '平静' },
+        surprised: { emoji: '😮', color: '#FF9F1C', label: '惊讶' },
+        sad: { emoji: '😢', color: '#4CC9F0', label: '悲伤' },
+        angry: { emoji: '😡', color: '#FF5F5F', label: '愤怒' },
+        fearful: { emoji: '😨', color: '#9D4EDD', label: '恐惧' },
+        disgusted: { emoji: '🤢', color: '#6BCB77', label: '厌恶' }
+      };
+
+      const order = ['happy', 'neutral', 'surprised', 'sad', 'angry', 'fearful', 'disgusted'];
+      const map = {};
+      for (let i = 0; i < summary.keys.length; i++) map[summary.keys[i]] = summary.values[i];
+      const valuesOrdered = order.map(k => (typeof map[k] === 'number' ? map[k] : 0));
+      const maxIdx = valuesOrdered.reduce((m, v, i, arr) => (v > arr[m] ? i : m), 0);
+
+      container.innerHTML = '';
+      order.forEach((k, idx) => {
+        const it = meta[k];
+        const v = valuesOrdered[idx];
+        const item = document.createElement('div');
+        item.className = 'kid-emotion-item' + (idx === maxIdx ? ' active' : '');
+        item.title = `${it.label}: ${Math.round(v * 1000) / 10}%`;
+        item.innerHTML = `
+          <div class="kid-emotion-icon">${it.emoji}</div>
+          <div class="kid-emotion-bar-bg">
+            <div class="kid-emotion-bar-fill" style="background:${it.color};height:${Math.max(0, Math.min(100, v * 100))}%;"></div>
+          </div>
+        `;
+        container.appendChild(item);
+      });
+
+      container.style.display = 'flex';
+    }
+
+    function renderKidTechniqueBlocks(scores, containerId) {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+
+      const want = ['open', 'clean', 'resonate'];
+      const palette = { open: 'kid-blue', clean: 'kid-purple', resonate: 'kid-green' };
+      const icon = { open: '🌬️', clean: '✨', resonate: '📣' };
+      const title = { open: 'Open', clean: 'Clean', resonate: 'Resonant' };
+
+      const byKey = {};
+      (scores || []).forEach(s => { if (s && s.technique) byKey[s.technique] = s; });
+
+      container.innerHTML = '';
+      want.forEach(k => {
+        const s = byKey[k];
+        const score = (s && typeof s.score === 'number') ? s.score : null;
+        const scoreText = (score == null) ? '-' : String(score);
+        const stars = (score == null) ? 0 : Math.max(1, Math.min(5, 6 - Math.round(score)));
+        const starText = (stars === 0) ? '' : ('⭐'.repeat(stars) + '☆'.repeat(5 - stars));
+        const block = document.createElement('div');
+        block.className = `kid-toy-block ${palette[k]}`;
+        block.innerHTML = `
+          <div class="kid-block-icon">${icon[k]}</div>
+          <div class="kid-block-title">${title[k]}</div>
+          <div class="kid-block-value">${scoreText}</div>
+          <div class="kid-block-sub">${starText}</div>
+        `;
+        container.appendChild(block);
+      });
+    }
+
+    function ensureEmotionModelsLoaded() {
+      if (emotionModelLoadPromise) return emotionModelLoadPromise;
+      emotionModelLoadPromise = (async () => {
+        const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
+        await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+        await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+        await faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL);
+      })();
+      return emotionModelLoadPromise;
+    }
+
+    function setEmotionStatus(text) {
+      const el = document.getElementById(emotionUiCurrent.statusId);
+      if (el) el.textContent = text;
+    }
+
+    async function startEmotionCapture(ui) {
+      if (ui && ui.liveId && ui.videoId && ui.statusId) emotionUiCurrent = ui;
+      const live = document.getElementById(emotionUiCurrent.liveId);
+      const video = document.getElementById(emotionUiCurrent.videoId);
+      if (!live || !video) return;
+
+      live.style.display = 'block';
+      resetEmotionAggregation();
+
+      try {
+        if (!navigator.mediaDevices?.getUserMedia) throw new Error('当前浏览器不支持摄像头');
+        setEmotionStatus('正在请求摄像头权限...');
+        const stream = await promiseWithTimeout(navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user' },
+          audio: false
+        }), 10000, '摄像头权限请求超时（请检查浏览器站点权限/系统隐私设置）');
+
+        emotionStream = stream;
+        video.srcObject = stream;
+        try { await promiseWithTimeout(video.play(), 4000, '摄像头预览启动超时'); } catch (_) {}
+
+        try { live.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_) {}
+
+        if (!window.faceapi) {
+          emotionActive = false;
+          emotionDetecting = false;
+          setEmotionStatus('摄像头已开启（face-api 未加载，情感分析不可用）');
+          return;
+        }
+
+        setEmotionStatus('正在加载表情模型...');
+        try {
+          await ensureEmotionModelsLoaded();
+          emotionActive = true;
+          emotionDetecting = false;
+          setEmotionStatus('情感分析中...');
+          scheduleEmotionLoop();
+        } catch (e) {
+          emotionActive = false;
+          emotionDetecting = false;
+          setEmotionStatus('摄像头已开启（情感模型加载失败：' + (e?.message || String(e)) + '）');
+        }
+      } catch (e) {
+        emotionActive = false;
+        emotionDetecting = false;
+        if (emotionRaf) {
+          cancelAnimationFrame(emotionRaf);
+          emotionRaf = 0;
+        }
+
+        const video = document.getElementById(emotionUiCurrent.videoId);
+        if (video) {
+          try { video.pause(); } catch (_) {}
+          try { video.srcObject = null; } catch (_) {}
+        }
+
+        if (emotionStream) {
+          try { emotionStream.getTracks().forEach(t => t.stop()); } catch (_) {}
+          emotionStream = null;
+        }
+
+        setEmotionStatus('摄像头/模型加载失败：' + (e?.message || String(e)));
+      }
+    }
+
+    function stopEmotionCapture() {
+      emotionActive = false;
+      emotionDetecting = false;
+      if (emotionRaf) {
+        cancelAnimationFrame(emotionRaf);
+        emotionRaf = 0;
+      }
+
+      const video = document.getElementById(emotionUiCurrent.videoId);
+      if (video) {
+        try { video.pause(); } catch (_) {}
+        try { video.srcObject = null; } catch (_) {}
+      }
+
+      if (emotionStream) {
+        try { emotionStream.getTracks().forEach(t => t.stop()); } catch (_) {}
+        emotionStream = null;
+      }
+
+      const live = document.getElementById(emotionUiCurrent.liveId);
+      if (live) live.style.display = 'none';
+      setEmotionStatus('未启动');
+    }
+
+    async function runEmotionStep() {
+      if (!emotionActive) return;
+      const video = document.getElementById(emotionUiCurrent.videoId);
+      if (!video) return;
+
+      if (video.readyState < 2) return;
+      if (emotionDetecting) return;
+      emotionDetecting = true;
+
+      try {
+        const det = await faceapi
+          .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 }))
+          .withFaceLandmarks()
+          .withFaceExpressions();
+
+        if (det?.expressions && emotionTotals) {
+          const ex = det.expressions;
+          for (const k of Object.keys(emotionTotals)) {
+            const v = ex[k];
+            if (typeof v === 'number' && Number.isFinite(v)) emotionTotals[k] += v;
+          }
+          emotionFrameCount += 1;
+          if (emotionFrameCount % 15 === 0) setEmotionStatus(`情感分析中... 已采样 ${emotionFrameCount} 帧`);
+        }
+      } catch (e) {
+        setEmotionStatus('情感分析出错：' + (e?.message || String(e)));
+      } finally {
+        emotionDetecting = false;
+      }
+    }
+
+    function scheduleEmotionLoop() {
+      if (!emotionActive) return;
+      emotionRaf = requestAnimationFrame(async () => {
+        await runEmotionStep();
+        scheduleEmotionLoop();
+      });
+    }
+
+    function renderEmotionPieChart(containerId = 'emotionPieContainer', canvasId = 'emotionPieChart') {
+      const container = document.getElementById(containerId);
+      const canvas = document.getElementById(canvasId);
+      if (!container || !canvas) return;
+
+      const summary = getEmotionSummary();
+      if (!summary || !window.Chart) {
+        if (emotionCharts[canvasId]) {
+          try { emotionCharts[canvasId].destroy(); } catch (_) {}
+          delete emotionCharts[canvasId];
+        }
+        container.style.display = 'none';
+        return;
+      }
+
+      const zh = {
+        neutral: '平静',
+        happy: '开心',
+        sad: '悲伤',
+        angry: '愤怒',
+        fearful: '恐惧',
+        disgusted: '厌恶',
+        surprised: '惊讶'
+      };
+
+      const labels = summary.keys.map(k => zh[k] || k);
+      const data = summary.values.map(v => Math.round(v * 1000) / 10);
+
+      container.style.display = 'block';
+
+      if (emotionCharts[canvasId]) {
+        try { emotionCharts[canvasId].destroy(); } catch (_) {}
+        delete emotionCharts[canvasId];
+      }
+
+      const ctx = canvas.getContext('2d');
+      emotionCharts[canvasId] = new Chart(ctx, {
+        type: 'pie',
+        data: {
+          labels,
+          datasets: [{
+            data,
+            backgroundColor: [
+              'rgba(108, 117, 125, 0.85)',
+              'rgba(255, 193, 7, 0.85)',
+              'rgba(52, 144, 220, 0.85)',
+              'rgba(220, 53, 69, 0.85)',
+              'rgba(111, 66, 193, 0.85)',
+              'rgba(40, 167, 69, 0.85)',
+              'rgba(253, 126, 20, 0.85)'
+            ],
+            borderColor: [
+              'rgba(108, 117, 125, 1)',
+              'rgba(255, 193, 7, 1)',
+              'rgba(52, 144, 220, 1)',
+              'rgba(220, 53, 69, 1)',
+              'rgba(111, 66, 193, 1)',
+              'rgba(40, 167, 69, 1)',
+              'rgba(253, 126, 20, 1)'
+            ],
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'right' },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `${ctx.label}: ${ctx.raw}%`
+              }
+            }
+          }
+        }
+      });
     }
 
     function writeAscii(view, offset, str) {
@@ -968,16 +1505,19 @@
     }
 
     async function initVoiceRecognition() {
-      try {
+      if (micStream) return true;
+      if (micInitPromise) return micInitPromise;
+      micInitPromise = (async () => {
+        try {
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
           voiceStatus.textContent = '浏览器不支持录音功能';
           voiceButton.disabled = true;
-          return;
+          return false;
         }
 
-        const stream = await navigator.mediaDevices.getUserMedia({
+        const stream = await promiseWithTimeout(navigator.mediaDevices.getUserMedia({
           audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: true }
-        });
+        }), 10000, '麦克风权限请求超时（请检查浏览器站点权限/系统隐私设置）');
         micStream = stream;
 
         const options = {};
@@ -1013,15 +1553,26 @@
         voiceStatus.textContent = '点击麦克风开始录音';
         voiceButton.disabled = false;
 
-      } catch (error) {
+        return true;
+        } catch (error) {
         console.error('语音识别初始化失败:', error);
         voiceStatus.textContent = '麦克风权限获取失败: ' + error.message;
         voiceButton.disabled = true;
-      }
+        return false;
+        }
+      })();
+
+      const ok = await micInitPromise;
+      if (!ok) micInitPromise = null;
+      return ok;
     }
 
-    function toggleRecording() {
-      if (!mediaRecorder) { voiceStatus.textContent = '语音识别未初始化'; return; }
+    async function toggleRecording() {
+      if (!mediaRecorder) {
+        voiceStatus.textContent = '正在请求麦克风权限...';
+        const ok = await initVoiceRecognition();
+        if (!ok || !mediaRecorder) return;
+      }
       if (isScoreRecording) { alert('正在进行评分录音，请先结束'); return; }
 
       if (!isRecording) {
@@ -1114,6 +1665,8 @@
       const voiceType = scoreVoiceTypeChosen || document.getElementById('voiceType')?.value || '女高音 Soprano';
       const modal = document.getElementById('audioScoringModal');
       if (modal && !modal.classList.contains('active')) modal.classList.add('active');
+      emotionTotals = null;
+      emotionFrameCount = 0;
       showLoadingScoring();
 
       try {
@@ -1125,27 +1678,125 @@
       }
     }
 
+    function resetScoreVoiceModalUi() {
+      setScoreVoiceModalRecordingState(false);
+      const resultsDiv = document.getElementById('scoreScoringResults');
+      if (resultsDiv) resultsDiv.style.display = 'none';
+      const pieContainer = document.getElementById('scoreEmotionPieContainer');
+      if (pieContainer) pieContainer.style.display = 'none';
+      const rainbow = document.getElementById('scoreEmotionRainbow');
+      if (rainbow) rainbow.style.display = 'none';
+      const live = document.getElementById('scoreEmotionLive');
+      if (live) live.style.display = 'none';
+      const status = document.getElementById('scoreEmotionStatus');
+      if (status) status.textContent = '未启动';
+    }
+
+    function setScoreVoiceModalRecordingState(recording) {
+      const startBtn = document.getElementById('scoreVoiceStartBtn');
+      const stopBtn = document.getElementById('scoreVoiceStopBtn');
+      const cancelBtn = document.getElementById('scoreVoiceCancelBtn');
+      const voiceTypeSel = document.getElementById('scoreVoiceType');
+
+      if (startBtn) {
+        startBtn.style.display = recording ? 'none' : 'block';
+        if (!recording) {
+          startBtn.disabled = false;
+          startBtn.textContent = '开始录音评分';
+        }
+      }
+      if (stopBtn) {
+        stopBtn.style.display = recording ? 'block' : 'none';
+        stopBtn.disabled = false;
+        stopBtn.textContent = '停止录音';
+      }
+      if (cancelBtn) cancelBtn.style.display = recording ? 'none' : 'block';
+      if (voiceTypeSel) voiceTypeSel.disabled = !!recording;
+    }
+
+    function stopScoreRecordingFromModal() {
+      stopEmotionCapture();
+      if (isScoreRecording) {
+        const stopBtn = document.getElementById('scoreVoiceStopBtn');
+        if (stopBtn) {
+          stopBtn.disabled = true;
+          stopBtn.textContent = '评分中...';
+        }
+        if (scoreRecorder && scoreRecorder.state !== 'inactive') {
+          try { scoreRecorder.stop(); } catch (_) {}
+        }
+        return;
+      }
+      const scoreBtn = document.getElementById('scoreLastRecordingTrigger');
+      if (scoreBtn) scoreBtn.innerHTML = isScoreRecording ? '⏹️' : '🎼';
+      setScoreVoiceModalRecordingState(false);
+    }
+
     function openScoreVoiceModal() {
       const modal = document.getElementById('scoreVoiceModal');
       if (modal) modal.classList.add('active');
+      resetScoreVoiceModalUi();
     }
 
     function closeScoreVoiceModal() {
+      stopScoreRecordingFromModal();
       const modal = document.getElementById('scoreVoiceModal');
       if (modal) modal.classList.remove('active');
+      resetScoreVoiceModalUi();
     }
 
-    function confirmScoreVoiceAndStart() {
+    async function confirmScoreVoiceAndStart() {
+      if (isRecording) { alert('正在进行语音输入录音，请先结束'); return; }
+      if (isScoreRecording) return;
+
+      const startBtn = document.getElementById('scoreVoiceStartBtn');
+      if (startBtn) {
+        startBtn.disabled = true;
+        startBtn.textContent = '正在初始化...';
+      }
+
       const sel = document.getElementById('scoreVoiceType');
       scoreVoiceTypeChosen = (sel && sel.value) ? sel.value : '女高音 Soprano';
-      closeScoreVoiceModal();
-      beginScoreRecording();
+
+      const status = document.getElementById('scoreEmotionStatus');
+      if (status) status.textContent = '正在启动摄像头预览...';
+      await startEmotionCapture({ liveId: 'scoreEmotionLive', videoId: 'scoreEmotionVideo', statusId: 'scoreEmotionStatus' });
+
+      if (!micStream) {
+        if (status) status.textContent = '请在浏览器提示中允许麦克风权限...';
+        voiceStatus.textContent = '正在请求麦克风权限...';
+        const ok = await initVoiceRecognition();
+        if (!ok) {
+          if (status) status.textContent = '麦克风权限未获取，无法开始录音评分';
+          if (startBtn) {
+            startBtn.disabled = false;
+            startBtn.textContent = '开始录音评分';
+          }
+          return;
+        }
+      }
+
+      try {
+        beginScoreRecording();
+      } catch (e) {
+        if (status) status.textContent = '开始录音失败：' + (e?.message || String(e));
+        if (startBtn) {
+          startBtn.disabled = false;
+          startBtn.textContent = '开始录音评分';
+        }
+      }
     }
 
     function beginScoreRecording() {
       if (!micStream) { voiceStatus.textContent = '语音识别未初始化'; return; }
       if (isRecording) { alert('正在进行语音输入录音，请先结束'); return; }
       if (isScoreRecording) return;
+
+      setScoreVoiceModalRecordingState(true);
+      const resultsDiv = document.getElementById('scoreScoringResults');
+      if (resultsDiv) resultsDiv.style.display = 'none';
+      const pieContainer = document.getElementById('scoreEmotionPieContainer');
+      if (pieContainer) pieContainer.style.display = 'none';
 
       const options = {};
       let mime = '';
@@ -1193,15 +1844,26 @@
             lastScoreRecordingFormat = 'wav';
           }
 
-          await scoreAudioBase64(lastScoreRecordingBase64, lastScoreRecordingFormat);
+          showLoadingScoring('scoreScoringResults');
+          const scoringResult = await sendAudioForScoring(lastScoreRecordingBase64, scoreVoiceTypeChosen, lastScoreRecordingFormat);
+          displayScoringResultsTo(scoringResult, {
+            resultsId: 'scoreScoringResults',
+            overallId: 'scoreOverallScore',
+            techniqueId: 'scoreTechniqueScores',
+            chartBarsId: 'scoreChartBars',
+            emotionRainbowId: 'scoreEmotionRainbow',
+            emotionContainerId: 'scoreEmotionPieContainer',
+            emotionCanvasId: 'scoreEmotionPieChart'
+          });
         } catch (e) {
           console.error(e);
-          showError('音频评分失败: ' + e.message);
+          showError('音频评分失败: ' + e.message, 'scoreScoringResults');
         } finally {
           isScoreRecording = false;
           const scoreBtn = document.getElementById('scoreLastRecordingTrigger');
           if (scoreBtn) scoreBtn.innerHTML = '🎼';
           voiceButton.disabled = false;
+          setScoreVoiceModalRecordingState(false);
         }
       };
 
@@ -1211,19 +1873,22 @@
 
       if (scoreBtn) scoreBtn.innerHTML = '⏹️';
       voiceButton.disabled = true;
-      voiceStatus.textContent = '评分录音中... 再点一次结束';
+      voiceStatus.textContent = '评分录音中... 请在弹窗内点击“停止录音”';
     }
 
-    function toggleScoreRecording() {
-      if (!micStream) { voiceStatus.textContent = '语音识别未初始化'; return; }
+    async function toggleScoreRecording() {
       if (isRecording) { alert('正在进行语音输入录音，请先结束'); return; }
 
       const scoreBtn = document.getElementById('scoreLastRecordingTrigger');
       if (!isScoreRecording) {
         openScoreVoiceModal();
+        if (!micStream) {
+          voiceStatus.textContent = '正在请求麦克风权限...';
+          await initVoiceRecognition();
+        }
       } else {
-        if (scoreRecorder && scoreRecorder.state !== 'inactive') scoreRecorder.stop();
-        if (scoreBtn) scoreBtn.innerHTML = '🎼';
+        openScoreVoiceModal();
+        if (scoreBtn) scoreBtn.innerHTML = '⏹️';
       }
     }
 
@@ -1378,6 +2043,8 @@
       const modal = document.getElementById('audioScoringModal');
       if (modal && !modal.classList.contains('active')) modal.classList.add('active');
 
+      emotionTotals = null;
+      emotionFrameCount = 0;
       showLoadingScoring();
 
       try {
@@ -1392,8 +2059,8 @@
       }
     }
 
-    function showLoadingScoring() {
-      const resultsDiv = document.getElementById('scoringResults');
+    function showLoadingScoring(resultsId = 'scoringResults') {
+      const resultsDiv = document.getElementById(resultsId);
       if (!resultsDiv) return;
       let loadingDiv = resultsDiv.querySelector('.loading');
       if (!loadingDiv) {
@@ -1435,10 +2102,10 @@
       return scoringResult;
     }
 
-    function displayScoringResults(result) {
-      const resultsDiv = document.getElementById('scoringResults');
-      const overallScore = document.getElementById('overallScore');
-      const techniqueScores = document.getElementById('techniqueScores');
+    function displayScoringResultsTo(result, ids) {
+      const resultsDiv = document.getElementById(ids.resultsId);
+      const overallScore = document.getElementById(ids.overallId);
+      const techniqueScores = document.getElementById(ids.techniqueId);
 
       const loadingDiv = resultsDiv?.querySelector('.loading');
       if (loadingDiv) loadingDiv.remove();
@@ -1446,25 +2113,16 @@
       if (overallScore) overallScore.textContent = Number(result.overall).toFixed(1);
 
       if (techniqueScores) {
-        techniqueScores.innerHTML = '';
-        (result.scores || []).forEach(item => {
-          const techniqueDiv = document.createElement('div');
-          techniqueDiv.className = 'technique-item';
-          const displayName = TECH_NAME_MAP[item.technique] || item.technique;
-          techniqueDiv.innerHTML = `
-            <span class="technique-name">${displayName}</span>
-            <span class="technique-score">${item.score}/5</span>
-          `;
-          techniqueScores.appendChild(techniqueDiv);
-        });
+        renderKidTechniqueBlocks(result.scores || [], ids.techniqueId);
       }
 
       if (resultsDiv) resultsDiv.style.display = 'block';
-      drawScoreChart(result);
+      if (ids.emotionRainbowId) renderEmotionRainbow(ids.emotionRainbowId);
+      renderEmotionPieChart(ids.emotionContainerId, ids.emotionCanvasId);
 
       let scoreDetails = `🎤 音频评分结果\n总体评分: ${Number(result.overall).toFixed(1)}\n\n`;
       scoreDetails += `各项评分：\n`;
-      (result.scores || []).forEach(item => {
+      (result.scores || []).filter(x => ['open', 'clean', 'resonate'].includes(x.technique)).forEach(item => {
         const displayName = TECH_NAME_MAP[item.technique] || item.technique;
         scoreDetails += `• ${displayName}: ${item.score}分\n`;
       });
@@ -1473,10 +2131,22 @@
       sendScoringToLLM(result);
     }
 
+    function displayScoringResults(result) {
+      displayScoringResultsTo(result, {
+        resultsId: 'scoringResults',
+        overallId: 'overallScore',
+        techniqueId: 'techniqueScores',
+        chartBarsId: 'chartBars',
+        emotionRainbowId: 'emotionRainbow',
+        emotionContainerId: 'emotionPieContainer',
+        emotionCanvasId: 'emotionPieChart'
+      });
+    }
+
     async function sendScoringToLLM(result) {
       let promptText = `我刚刚完成了一次音频评分，总体评分是${Number(result.overall).toFixed(1)}分。\n\n`;
       promptText += `各项评分详情：\n`;
-      (result.scores || []).forEach(item => {
+      (result.scores || []).filter(x => ['open', 'clean', 'resonate'].includes(x.technique)).forEach(item => {
         const displayName = TECH_NAME_MAP[item.technique] || item.technique;
         promptText += `• ${displayName}: ${item.score}分\n`;
       });
@@ -1554,8 +2224,8 @@
       }
     }
 
-    function drawScoreChart(result) {
-      const chartBars = document.getElementById('chartBars');
+    function drawScoreChart(result, chartBarsId = 'chartBars') {
+      const chartBars = document.getElementById(chartBarsId);
       if (!chartBars) return;
 
       const scores = result.scores || [];
@@ -1579,18 +2249,30 @@
       });
     }
 
-    function showError(message) {
-      const resultsDiv = document.getElementById('scoringResults');
+    function showError(message, resultsId = 'scoringResults') {
+      const resultsDiv = document.getElementById(resultsId);
       if (!resultsDiv) return;
       resultsDiv.innerHTML = `<div class="error"><p>${message}</p></div>`;
       resultsDiv.style.display = 'block';
+    }
+
+    async function preflightMediaPermissions() {
+      if (!navigator.permissions?.query) return;
+      try {
+        await navigator.permissions.query({ name: 'microphone' });
+      } catch (_) {}
+      try {
+        await navigator.permissions.query({ name: 'camera' });
+      } catch (_) {}
     }
 
     // =========================
     // 初始化
     // =========================
     window.addEventListener('load', () => {
-      initVoiceRecognition();
+      (async () => {
+        await preflightMediaPermissions();
+      })();
       voiceButton.addEventListener('click', toggleRecording);
 
       ttsToggleBtn.addEventListener('click', async () => {

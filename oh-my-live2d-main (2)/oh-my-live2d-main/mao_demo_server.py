@@ -6,6 +6,7 @@ mao-demo HTTP服务器
 
 import http.server
 import socketserver
+import mimetypes
 import os
 import sys
 
@@ -13,9 +14,44 @@ import sys
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 os.chdir(PROJECT_ROOT)
 
-PORT = 8000
+PORT = int(os.environ.get("WEB_PORT", "8000"))
+MODE = (os.environ.get("WEB_MODE", "all") or "all").strip().lower()
 
 class MaoDemoHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
+    extensions_map = {
+        **http.server.SimpleHTTPRequestHandler.extensions_map,
+        ".wasm": "application/wasm",
+        ".mjs": "text/javascript",
+        ".json": "application/json",
+    }
+
+    def do_GET(self):
+        raw_path = (self.path or "/")
+        path = raw_path.split("?", 1)[0].split("#", 1)[0]
+
+        if MODE != "assets":
+            if path in ("/", "/index.html"):
+                self.send_response(302)
+                self.send_header("Location", "/mao_demo.html")
+                self.end_headers()
+                return
+            if path.lower() == "/mao-demo.html":
+                self.send_response(302)
+                self.send_header("Location", "/mao_demo.html")
+                self.end_headers()
+                return
+
+        if MODE == "page":
+            if path not in ("/mao_demo.html", "/chat_interface.html", "/favicon.ico"):
+                self.send_error(404)
+                return
+        elif MODE == "assets":
+            if not (path.startswith("/packages/") or path.startswith("/mao_pro_en/")):
+                self.send_error(404)
+                return
+
+        return super().do_GET()
+
     def end_headers(self):
         # 添加CORS头以允许跨域访问
         self.send_header('Access-Control-Allow-Origin', '*')
@@ -29,10 +65,15 @@ class MaoDemoHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
 
 def main():
-    with socketserver.TCPServer(("", PORT), MaoDemoHTTPRequestHandler) as httpd:
+    socketserver.ThreadingTCPServer.allow_reuse_address = True
+    with socketserver.ThreadingTCPServer(("", PORT), MaoDemoHTTPRequestHandler) as httpd:
         print(f"mao-demo服务器启动成功!")
-        print(f"访问地址: http://localhost:{PORT}/mao_demo.html")
+        if MODE == "assets":
+            print(f"资源服务: http://localhost:{PORT}/")
+        else:
+            print(f"访问地址: http://localhost:{PORT}/mao_demo.html")
         print(f"服务目录: {PROJECT_ROOT}")
+        print(f"模式: {MODE}")
         print("按 Ctrl+C 停止服务器")
         
         try:
