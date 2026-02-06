@@ -1190,10 +1190,27 @@
     function ensureEmotionModelsLoaded() {
       if (emotionModelLoadPromise) return emotionModelLoadPromise;
       emotionModelLoadPromise = (async () => {
-        const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
-        await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-        await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-        await faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL);
+        const base = window.__LIVE2D_ASSET_BASE__ || location.origin;
+        const localModelUrl = `${String(base).replace(/\/$/, '')}/face-api-models`;
+        const remoteModelUrl = 'https://justadudewhohacks.github.io/face-api.js/models';
+
+        const loadAll = async (url) => {
+          await faceapi.nets.tinyFaceDetector.loadFromUri(url);
+          await faceapi.nets.faceLandmark68Net.loadFromUri(url);
+          await faceapi.nets.faceExpressionNet.loadFromUri(url);
+        };
+
+        try {
+          await loadAll(localModelUrl);
+        } catch (eLocal) {
+          try {
+            await loadAll(remoteModelUrl);
+          } catch (eRemote) {
+            const localMsg = eLocal?.message || String(eLocal);
+            const remoteMsg = eRemote?.message || String(eRemote);
+            throw new Error(`情感模型加载失败（本地：${localMsg}；网络：${remoteMsg}）`);
+          }
+        }
       })();
       return emotionModelLoadPromise;
     }

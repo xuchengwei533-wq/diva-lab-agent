@@ -1,0 +1,1565 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>表情识别 + 音频分析系统</title>
+  <script defer src="https://unpkg.com/face-api.js@0.22.2/dist/face-api.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://unpkg.com/meyda@5.2.1/dist/web/meyda.min.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body { 
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f5f5f5;
+      color: #333;
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+      padding: 20px 0;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+
+    .header h2 {
+      color: #2c3e50;
+      margin-bottom: 15px;
+      font-size: 2em;
+    }
+
+    .upload-section {
+      margin-bottom: 20px;
+    }
+
+    .file-input-wrapper {
+      position: relative;
+      display: inline-block;
+      margin: 0 10px;
+    }
+
+    .file-input-wrapper input[type=file] {
+      position: absolute;
+      left: -9999px;
+      opacity: 0;
+    }
+
+    .file-input-label {
+      display: inline-block;
+      padding: 12px 30px;
+      background: #3498db;
+      color: white;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+      font-size: 16px;
+    }
+
+    .file-input-label:hover {
+      background: #2980b9;
+    }
+
+    .status {
+      margin: 15px 0;
+      padding: 10px;
+      background: #e8f4fd;
+      border: 2px solid #3498db;
+      border-radius: 8px;
+      color: #2980b9;
+      font-weight: 500;
+    }
+
+    .debug-info {
+      margin: 10px 0;
+      padding: 8px;
+      background: #fff3cd;
+      border: 1px solid #ffeaa7;
+      border-radius: 4px;
+      font-size: 12px;
+      color: #856404;
+    }
+
+    .main-content {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 30px;
+      margin-bottom: 30px;
+    }
+
+    .video-section, .realtime-audio-section {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+
+    .video-container { 
+      position: relative; 
+      width: 100%;
+      max-width: 640px;
+      height: 380px;
+      margin: 0 auto;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #000;
+    }
+
+    #inputVideo {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    #overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    .chart-section {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      margin-bottom: 30px;
+    }
+
+    .chart-title {
+      text-align: center;
+      margin-bottom: 20px;
+      color: #2c3e50;
+      font-size: 1.5em;
+    }
+
+    .chart-container { 
+      width: 100%;
+      height: 300px;
+      margin: 0 auto;
+      position: relative;
+    }
+
+    .realtime-charts {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    .realtime-chart {
+      height: 200px;
+      position: relative;
+    }
+
+    /* 分析结果区域样式 */
+    .analysis-section {
+      display: none;
+      margin-top: 30px;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+
+    .stat-card {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      text-align: center;
+    }
+
+    .stat-number {
+      font-size: 1.5em;
+      font-weight: bold;
+      color: #3498db;
+    }
+
+    .stat-label {
+      color: #666;
+      margin-top: 5px;
+      font-size: 0.9em;
+    }
+
+    .charts-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+      gap: 30px;
+      margin-bottom: 30px;
+    }
+
+    .chart-card {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+
+    .chart-card h3 {
+      text-align: center;
+      margin-bottom: 20px;
+      color: #2c3e50;
+    }
+
+    .export-buttons {
+      text-align: center;
+      margin-top: 20px;
+    }
+
+    .export-btn {
+      display: inline-block;
+      padding: 12px 24px;
+      margin: 0 10px;
+      background: #28a745;
+      color: white;
+      text-decoration: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+      border: none;
+      font-size: 16px;
+    }
+
+    .export-btn:hover {
+      background: #218838;
+    }
+
+    .large-chart {
+      grid-column: span 2;
+    }
+
+    .feature-section {
+      margin-bottom: 40px;
+    }
+
+    .feature-title {
+      text-align: center;
+      font-size: 1.8em;
+      color: #2c3e50;
+      margin-bottom: 30px;
+      padding: 20px 0;
+      background: linear-gradient(45deg, #3498db, #2980b9);
+      color: white;
+      border-radius: 12px;
+    }
+
+    @media (max-width: 1200px) {
+      .main-content {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .container {
+        padding: 10px;
+      }
+      
+      .charts-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .realtime-charts {
+        grid-template-columns: 1fr;
+      }
+
+      .large-chart {
+        grid-column: span 1;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h2>多模态情感分析系统</h2>
+      <p>基于视频表情识别与音频特征分析的综合情感检测</p>
+      <div class="upload-section">
+        <div class="file-input-wrapper">
+          <input type="file" id="videoUpload" accept="video/*">
+          <label for="videoUpload" class="file-input-label">
+            📹 选择视频文件
+          </label>
+        </div>
+      </div>
+      <div id="status" class="status">正在加载模型...</div>
+      <div id="debugInfo" class="debug-info">调试信息将显示在这里</div>
+    </div>
+
+    <div class="main-content">
+      <div class="video-section">
+        <div class="chart-title">视频表情识别</div>
+        <div class="video-container" id="videoContainer">
+          <video id="inputVideo" controls crossorigin="anonymous"></video>
+          <canvas id="overlay"></canvas>
+        </div>
+        <div class="chart-container" style="margin-top: 20px;">
+          <canvas id="expressionChart"></canvas>
+        </div>
+      </div>
+
+      <div class="realtime-audio-section">
+        <div class="chart-title">实时音频分析</div>
+        <div class="realtime-charts">
+          <div class="realtime-chart">
+            <canvas id="realtimeBasic"></canvas>
+          </div>
+          <div class="realtime-chart">
+            <canvas id="realtimeSpectral"></canvas>
+          </div>
+          <div class="realtime-chart">
+            <canvas id="realtimeMFCC"></canvas>
+          </div>
+          <div class="realtime-chart">
+            <canvas id="realtimeLoudness"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 分析结果区域 -->
+    <div id="analysisSection" class="analysis-section">
+      <h2 style="text-align: center; margin-bottom: 30px; color: #2c3e50;">综合分析结果</h2>
+      
+      <!-- 统计概览 -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-number" id="totalFrames">0</div>
+          <div class="stat-label">总帧数</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" id="dominantEmotion">-</div>
+          <div class="stat-label">主要表情</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" id="videoDuration">0s</div>
+          <div class="stat-label">视频时长</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" id="avgRMS">0</div>
+          <div class="stat-label">平均响度</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" id="avgSpectralCentroid">0Hz</div>
+          <div class="stat-label">平均频谱质心</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" id="avgZCR">0</div>
+          <div class="stat-label">平均过零率</div>
+        </div>
+      </div>
+
+      <!-- 视觉分析 -->
+      <div class="feature-section">
+        <div class="feature-title">🎭 视觉情感分析</div>
+        <div class="charts-grid">
+          <div class="chart-card">
+            <h3>表情变化时间线</h3>
+            <div style="height: 300px; position: relative;">
+              <canvas id="timelineChart"></canvas>
+            </div>
+          </div>
+          <div class="chart-card">
+            <h3>平均表情分布</h3>
+            <div style="height: 300px; position: relative;">
+              <canvas id="summaryChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 音频基础特征分析 -->
+      <div class="feature-section">
+        <div class="feature-title">🎵 音频基础特征分析</div>
+        <div class="charts-grid">
+          <div class="chart-card large-chart">
+            <h3>时域特征变化 (RMS, ZCR, Energy)</h3>
+            <div style="height: 300px; position: relative;">
+              <canvas id="timedomainChart"></canvas>
+            </div>
+          </div>
+          <div class="chart-card">
+            <h3>RMS 分布</h3>
+            <div style="height: 300px; position: relative;">
+              <canvas id="rmsDistChart"></canvas>
+            </div>
+          </div>
+          <div class="chart-card">
+            <h3>过零率分析</h3>
+            <div style="height: 300px; position: relative;">
+              <canvas id="zcrChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 频谱特征分析 -->
+      <div class="feature-section">
+        <div class="feature-title">📊 频谱特征分析</div>
+        <div class="charts-grid">
+          <div class="chart-card large-chart">
+            <h3>频谱特征时间线</h3>
+            <div style="height: 300px; position: relative;">
+              <canvas id="spectralTimelineChart"></canvas>
+            </div>
+          </div>
+          <div class="chart-card">
+            <h3>频谱质心分布</h3>
+            <div style="height: 300px; position: relative;">
+              <canvas id="spectralCentroidChart"></canvas>
+            </div>
+          </div>
+          <div class="chart-card">
+            <h3>频谱平坦度</h3>
+            <div style="height: 300px; position: relative;">
+              <canvas id="spectralFlatnessChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MFCC 和 色度分析 -->
+      <div class="feature-section">
+        <div class="feature-title">🎼 高级音频特征</div>
+        <div class="charts-grid">
+          <div class="chart-card large-chart">
+            <h3>MFCC 热力图</h3>
+            <div style="height: 400px; position: relative;">
+              <canvas id="mfccHeatmapChart"></canvas>
+            </div>
+          </div>
+          <div class="chart-card">
+            <h3>色度向量平均值</h3>
+            <div style="height: 300px; position: relative;">
+              <canvas id="chromaChart"></canvas>
+            </div>
+          </div>
+          <div class="chart-card">
+            <h3>响度分布 (Bark频段)</h3>
+            <div style="height: 300px; position: relative;">
+              <canvas id="loudnessChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="export-buttons">
+        <button id="exportData" class="export-btn">📊 导出完整数据 (JSON)</button>
+        <button id="exportAudioData" class="export-btn">🎵 导出音频特征 (CSV)</button>
+        <button id="exportChart" class="export-btn">📈 导出时间线图表</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.addEventListener('load', async () => {
+      const video = document.getElementById('inputVideo');
+      const canvas = document.getElementById('overlay');
+      const statusDiv = document.getElementById('status');
+      const debugDiv = document.getElementById('debugInfo');
+      const ctxChart = document.getElementById('expressionChart').getContext('2d');
+      
+      // 数据记录
+      let emotionHistory = [];
+      let audioHistory = [];
+      let isRecording = false;
+      let recordingStartTime = 0;
+      let audioStartTime = 0;
+      let audioContext = null;
+      let sourceNode = null;
+      let analyzer = null;
+      let analysisStartTime = 0; // 音频分析开始的绝对时间
+
+      // 实时图表
+      let realtimeCharts = {};
+
+      // 调试函数
+      function debugLog(message) {
+        console.log(message);
+        debugDiv.textContent = message;
+      }
+
+      // 表情标签（中英文对照）
+      const expressionLabels = ["neutral", "happy", "sad", "angry", "fearful", "disgusted", "surprised"];
+      const expressionLabelsZH = ["平静", "开心", "悲伤", "愤怒", "恐惧", "厌恶", "惊讶"];
+
+      // 音频特征配置
+      const audioFeatures = [
+        'rms', 'zcr', 'energy',
+        'spectralCentroid', 'spectralFlatness', 'spectralSlope', 
+        'spectralRolloff', 'spectralSpread', 'spectralSkewness', 'spectralKurtosis',
+        'perceptualSpread', 'perceptualSharpness',
+        'chroma', 'mfcc', 'loudness'
+      ];
+
+      // 初始化实时图表
+      function initializeRealtimeCharts() {
+        // 基础特征图表
+        realtimeCharts.basic = new Chart(document.getElementById('realtimeBasic'), {
+          type: 'line',
+          data: {
+            labels: [],
+            datasets: [
+              {
+                label: 'RMS',
+                data: [],
+                borderColor: 'rgba(255, 99, 132, 1)',
+                backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                tension: 0.1
+              },
+              {
+                label: 'ZCR',
+                data: [],
+                borderColor: 'rgba(54, 162, 235, 1)',
+                backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                tension: 0.1,
+                yAxisID: 'y1'
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { title: { display: true, text: '基础特征' }},
+            scales: {
+              y: { beginAtZero: true, title: { display: true, text: 'RMS' }},
+              y1: { type: 'linear', display: true, position: 'right', beginAtZero: true, title: { display: true, text: 'ZCR' }}
+            }
+          }
+        });
+
+        // 频谱特征图表
+        realtimeCharts.spectral = new Chart(document.getElementById('realtimeSpectral'), {
+          type: 'line',
+          data: {
+            labels: [],
+            datasets: [
+              {
+                label: '频谱质心',
+                data: [],
+                borderColor: 'rgba(255, 206, 86, 1)',
+                backgroundColor: 'rgba(255, 206, 86, 0.1)',
+                tension: 0.1
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { title: { display: true, text: '频谱质心' }},
+            scales: { y: { beginAtZero: true, title: { display: true, text: 'Hz' }}}
+          }
+        });
+
+        // MFCC 图表
+        realtimeCharts.mfcc = new Chart(document.getElementById('realtimeMFCC'), {
+          type: 'bar',
+          data: {
+            labels: Array.from({length: 13}, (_, i) => `MFCC${i+1}`),
+            datasets: [{
+              label: 'MFCC',
+              data: Array(13).fill(0),
+              backgroundColor: 'rgba(75, 192, 192, 0.6)',
+              borderColor: 'rgba(75, 192, 192, 1)',
+              borderWidth: 1
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { title: { display: true, text: 'MFCC 特征' }, legend: { display: false }},
+            scales: { y: { title: { display: true, text: '系数值' }}}
+          }
+        });
+
+        // 响度图表
+        realtimeCharts.loudness = new Chart(document.getElementById('realtimeLoudness'), {
+          type: 'bar',
+          data: {
+            labels: Array.from({length: 24}, (_, i) => `B${i+1}`),
+            datasets: [{
+              label: '响度',
+              data: Array(24).fill(0),
+              backgroundColor: 'rgba(153, 102, 255, 0.6)',
+              borderColor: 'rgba(153, 102, 255, 1)',
+              borderWidth: 1
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { title: { display: true, text: 'Bark频段响度' }, legend: { display: false }},
+            scales: { 
+              y: { title: { display: true, text: '响度值' }},
+              x: { display: false }
+            }
+          }
+        });
+      }
+
+      // 初始化 Chart.js 柱状图
+      const chart = new Chart(ctxChart, {
+        type: 'bar',
+        data: {
+          labels: expressionLabelsZH,
+          datasets: [{
+            label: "表情概率",
+            data: Array(expressionLabels.length).fill(0),
+            backgroundColor: [
+              'rgba(108, 117, 125, 0.8)',
+              'rgba(255, 193, 7, 0.8)',
+              'rgba(52, 144, 220, 0.8)',
+              'rgba(220, 53, 69, 0.8)',
+              'rgba(111, 66, 193, 0.8)',
+              'rgba(40, 167, 69, 0.8)',
+              'rgba(253, 126, 20, 0.8)'
+            ],
+            borderColor: [
+              'rgba(108, 117, 125, 1)',
+              'rgba(255, 193, 7, 1)',
+              'rgba(52, 144, 220, 1)',
+              'rgba(220, 53, 69, 1)',
+              'rgba(111, 66, 193, 1)',
+              'rgba(40, 167, 69, 1)',
+              'rgba(253, 126, 20, 1)'
+            ],
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false }},
+          scales: {
+            y: { beginAtZero: true, max: 1 },
+            x: { title: { display: true, text: '表情类型' }}
+          }
+        }
+      });
+
+      // 加载模型
+      async function loadModels() {
+        try {
+          const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@latest/model';
+          await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+          await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+          await faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL);
+          
+          statusDiv.innerText = "✅ 模型加载完成，请上传视频文件";
+          statusDiv.style.background = '#d4edda';
+          statusDiv.style.borderColor = '#28a745';
+          statusDiv.style.color = '#155724';
+          debugLog("模型加载完成");
+        } catch (error) {
+          console.error('模型加载失败:', error);
+          statusDiv.innerText = "❌ 模型加载失败，请刷新页面重试";
+          statusDiv.style.background = '#f8d7da';
+          statusDiv.style.borderColor = '#dc3545';
+          statusDiv.style.color = '#721c24';
+          debugLog(`模型加载失败: ${error.message}`);
+        }
+      }
+
+      // 改进的音频分析初始化
+      function initializeAudioAnalysis() {
+        try {
+          // 如果已有分析器，先停止
+          if (analyzer) {
+            analyzer.stop();
+          }
+          if (audioContext && audioContext.state !== 'closed') {
+            audioContext.close();
+          }
+
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          sourceNode = audioContext.createMediaElementSource(video);
+          
+          // 记录音频分析开始时间
+          analysisStartTime = Date.now();
+          
+          if (typeof Meyda !== 'undefined') {
+            analyzer = Meyda.createMeydaAnalyzer({
+              audioContext: audioContext,
+              source: sourceNode,
+              bufferSize: 1024,
+              featureExtractors: audioFeatures,
+              callback: (features) => {
+                if (isRecording && features && video && !video.paused && !video.ended) {
+                  // 使用多种方法获取时间戳，优先使用视频时间
+                  let currentTimestamp;
+                  
+                  // 方法1：优先使用视频当前时间
+                  if (video.currentTime > 0) {
+                    currentTimestamp = video.currentTime;
+                  } 
+                  // 方法2：如果视频时间为0，使用相对时间
+                  else {
+                    const elapsedMs = Date.now() - analysisStartTime;
+                    currentTimestamp = elapsedMs / 1000; // 转换为秒
+                  }
+                  
+                  // 记录音频特征数据
+                  audioHistory.push({
+                    timestamp: currentTimestamp,
+                    features: {...features},
+                    videoTime: video.currentTime, // 同时记录视频时间用于调试
+                    absoluteTime: Date.now() - analysisStartTime // 记录绝对时间差
+                  });
+
+                  // 更新实时图表
+                  updateRealtimeCharts(features, currentTimestamp);
+                  
+                  // 调试信息
+                  if (audioHistory.length % 10 === 0) { // 每10帧输出一次调试信息
+                    debugLog(`音频帧 ${audioHistory.length}: 时间=${currentTimestamp.toFixed(2)}s, 视频时间=${video.currentTime.toFixed(2)}s, RMS=${features.rms?.toFixed(3)}`);
+                  }
+                }
+              }
+            });
+
+            // 连接到输出（允许听到声音）
+            sourceNode.connect(audioContext.destination);
+            
+            debugLog('Meyda 音频分析初始化成功');
+          } else {
+            debugLog('Meyda 库未加载');
+          }
+        } catch (error) {
+          debugLog(`音频分析初始化失败: ${error.message}`);
+          console.error('音频分析初始化失败:', error);
+        }
+      }
+
+      // 更新实时图表
+      function updateRealtimeCharts(features, timestamp) {
+        const currentTime = Math.round(timestamp * 10) / 10; // 保留1位小数
+
+        // 更新基础特征图表
+        if (features.rms !== undefined && features.zcr !== undefined) {
+          const basicChart = realtimeCharts.basic;
+          if (basicChart.data.labels.length > 50) {
+            basicChart.data.labels.shift();
+            basicChart.data.datasets[0].data.shift();
+            basicChart.data.datasets[1].data.shift();
+          }
+          basicChart.data.labels.push(currentTime);
+          basicChart.data.datasets[0].data.push(features.rms);
+          basicChart.data.datasets[1].data.push(features.zcr);
+          basicChart.update('none');
+        }
+
+        // 更新频谱特征图表
+        if (features.spectralCentroid !== undefined) {
+          const spectralChart = realtimeCharts.spectral;
+          if (spectralChart.data.labels.length > 50) {
+            spectralChart.data.labels.shift();
+            spectralChart.data.datasets[0].data.shift();
+          }
+          spectralChart.data.labels.push(currentTime);
+          spectralChart.data.datasets[0].data.push(features.spectralCentroid);
+          spectralChart.update('none');
+        }
+
+        // 更新MFCC图表
+        if (features.mfcc && Array.isArray(features.mfcc)) {
+          const mfccChart = realtimeCharts.mfcc;
+          mfccChart.data.datasets[0].data = features.mfcc.slice(0, 13);
+          mfccChart.update('none');
+        }
+
+        // 更新响度图表
+        if (features.loudness && features.loudness.specific && Array.isArray(features.loudness.specific)) {
+          const loudnessChart = realtimeCharts.loudness;
+          loudnessChart.data.datasets[0].data = features.loudness.specific.slice(0, 24);
+          loudnessChart.update('none');
+        }
+      }
+
+      // 加载模型和初始化图表
+      await loadModels();
+      initializeRealtimeCharts();
+
+      // 上传视频
+      document.getElementById('videoUpload').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        // 重置数据
+        emotionHistory = [];
+        audioHistory = [];
+        isRecording = false;
+        document.getElementById('analysisSection').style.display = 'none';
+
+        const url = URL.createObjectURL(file);
+        video.src = url;
+        video.muted = false; // 允许音频播放以便分析
+        
+        statusDiv.innerText = "📹 视频已加载，开始播放进行检测";
+        debugLog(`视频文件加载: ${file.name}, 大小: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
+
+        video.onloadedmetadata = () => {
+          const container = document.getElementById('videoContainer');
+          canvas.width = container.offsetWidth;
+          canvas.height = container.offsetHeight;
+          debugLog(`视频元数据加载完成，时长: ${video.duration.toFixed(2)}s`);
+        };
+      });
+
+      // 改进的视频播放事件处理
+      video.addEventListener('play', () => {
+        debugLog(`视频开始播放，当前时间: ${video.currentTime}`);
+        
+        const container = document.getElementById('videoContainer');
+        const displaySize = { width: container.offsetWidth, height: container.offsetHeight };
+        faceapi.matchDimensions(canvas, displaySize);
+        
+        // 开始记录
+        isRecording = true;
+        recordingStartTime = Date.now();
+        audioStartTime = Date.now();
+
+        // 确保音频上下文已恢复
+        if (audioContext && audioContext.state === 'suspended') {
+          audioContext.resume().then(() => {
+            debugLog('音频上下文已恢复');
+          });
+        }
+
+        // 启动音频分析（在视频播放后）
+        setTimeout(() => {
+          if (!analyzer) {
+            initializeAudioAnalysis();
+          }
+          if (analyzer) {
+            analyzer.start();
+            debugLog('音频分析已启动');
+          }
+        }, 100); // 延迟100ms启动音频分析
+
+        async function runDetection() {
+          if (video.paused || video.ended) return;
+
+          try {
+            const detections = await faceapi
+              .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
+              .withFaceLandmarks()
+              .withFaceExpressions();
+
+            const resizedDetections = faceapi.resizeResults(detections, displaySize);
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (resizedDetections.length > 0) {
+              const face = resizedDetections[0];
+              faceapi.draw.drawDetections(canvas, [face]);
+              faceapi.draw.drawFaceLandmarks(canvas, [face]);
+              faceapi.draw.drawFaceExpressions(canvas, [face]);
+
+              // 更新柱状图数据
+              const expressions = face.expressions;
+              chart.data.datasets[0].data = expressionLabels.map(e => expressions[e] || 0);
+              chart.update('none');
+
+              // 记录数据
+              if (isRecording) {
+                const emotionData = {
+                  timestamp: video.currentTime,
+                  expressions: { ...expressions }
+                };
+                emotionHistory.push(emotionData);
+              }
+
+              statusDiv.innerText = `✅ 正在检测表情和音频... (视频帧: ${emotionHistory.length}, 音频帧: ${audioHistory.length}, 时间: ${video.currentTime.toFixed(2)}s)`;
+            } else {
+              statusDiv.innerText = `⚠️ 未检测到人脸 (音频帧: ${audioHistory.length}, 时间: ${video.currentTime.toFixed(2)}s)`;
+            }
+          } catch (error) {
+            console.error('检测错误:', error);
+            debugLog(`检测错误: ${error.message}`);
+          }
+
+          requestAnimationFrame(runDetection);
+        }
+
+        runDetection();
+      });
+
+      // 视频暂停时停止音频分析
+      video.addEventListener('pause', () => {
+        debugLog('视频暂停，停止音频分析');
+        if (analyzer) {
+          analyzer.stop();
+        }
+      });
+
+      // 视频结束事件
+      video.addEventListener('ended', () => {
+        isRecording = false;
+        if (analyzer) {
+          analyzer.stop();
+        }
+        statusDiv.innerText = `🎬 分析完成！视频帧: ${emotionHistory.length}, 音频帧: ${audioHistory.length}`;
+        statusDiv.style.background = '#d1ecf1';
+        statusDiv.style.borderColor = '#17a2b8';
+        statusDiv.style.color = '#0c5460';
+        
+        debugLog(`分析完成 - 视频帧: ${emotionHistory.length}, 音频帧: ${audioHistory.length}`);
+        
+        // 输出时间戳调试信息
+        if (audioHistory.length > 0) {
+          const firstAudio = audioHistory[0];
+          const lastAudio = audioHistory[audioHistory.length - 1];
+          debugLog(`音频时间戳范围: ${firstAudio.timestamp.toFixed(2)}s - ${lastAudio.timestamp.toFixed(2)}s`);
+        }
+        
+        generateAnalysisReport();
+      });
+
+      // 生成分析报告
+      function generateAnalysisReport() {
+        const analysisSection = document.getElementById('analysisSection');
+        analysisSection.style.display = 'block';
+        analysisSection.scrollIntoView({ behavior: 'smooth' });
+
+        updateStatistics();
+        generateVisualCharts();
+        generateAudioCharts();
+        initializeExportButtons();
+      }
+
+      // 更新统计数据
+      function updateStatistics() {
+        const validEmotionData = emotionHistory.filter(d => d.expressions);
+        const validAudioData = audioHistory.filter(d => d.features && d.features.rms !== undefined);
+        
+        // 基础统计
+        document.getElementById('totalFrames').textContent = emotionHistory.length;
+        document.getElementById('videoDuration').textContent = `${Math.round(video.duration)}s`;
+
+        // 表情统计
+        if (validEmotionData.length > 0) {
+          const emotionTotals = {};
+          expressionLabels.forEach(label => emotionTotals[label] = 0);
+          
+          validEmotionData.forEach(data => {
+            Object.entries(data.expressions).forEach(([emotion, value]) => {
+              emotionTotals[emotion] += value;
+            });
+          });
+
+          const dominantEmotion = Object.entries(emotionTotals).reduce((a, b) => 
+            emotionTotals[a[0]] > emotionTotals[b[0]] ? a : b
+          )[0];
+          
+          document.getElementById('dominantEmotion').textContent = 
+            expressionLabelsZH[expressionLabels.indexOf(dominantEmotion)];
+        }
+
+        // 音频统计
+        if (validAudioData.length > 0) {
+          const avgRMS = validAudioData.reduce((sum, d) => sum + (d.features.rms || 0), 0) / validAudioData.length;
+          const avgSpectralCentroid = validAudioData.reduce((sum, d) => sum + (d.features.spectralCentroid || 0), 0) / validAudioData.length;
+          const avgZCR = validAudioData.reduce((sum, d) => sum + (d.features.zcr || 0), 0) / validAudioData.length;
+          
+          document.getElementById('avgRMS').textContent = avgRMS.toFixed(3);
+          document.getElementById('avgSpectralCentroid').textContent = `${Math.round(avgSpectralCentroid)}Hz`;
+          document.getElementById('avgZCR').textContent = avgZCR.toFixed(3);
+        }
+      }
+
+      // 生成视觉图表
+      function generateVisualCharts() {
+        if (emotionHistory.length === 0) return;
+
+        const validData = emotionHistory.filter(d => d.expressions);
+        
+        // 表情时间线
+        const timelineCtx = document.getElementById('timelineChart').getContext('2d');
+        const datasets = expressionLabels.map((label, index) => ({
+          label: expressionLabelsZH[index],
+          data: validData.map(d => ({ x: d.timestamp, y: d.expressions[label] || 0 })),
+          borderColor: [
+            'rgba(108, 117, 125, 1)', 'rgba(255, 193, 7, 1)', 'rgba(52, 144, 220, 1)',
+            'rgba(220, 53, 69, 1)', 'rgba(111, 66, 193, 1)', 'rgba(40, 167, 69, 1)', 'rgba(253, 126, 20, 1)'
+          ][index],
+          backgroundColor: [
+            'rgba(108, 117, 125, 0.1)', 'rgba(255, 193, 7, 0.1)', 'rgba(52, 144, 220, 0.1)',
+            'rgba(220, 53, 69, 0.1)', 'rgba(111, 66, 193, 0.1)', 'rgba(40, 167, 69, 0.1)', 'rgba(253, 126, 20, 0.1)'
+          ][index],
+          tension: 0.1,
+          pointRadius: 1
+        }));
+
+        new Chart(timelineCtx, {
+          type: 'line',
+          data: { datasets },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              x: { type: 'linear', title: { display: true, text: '时间 (秒)' }},
+              y: { beginAtZero: true, max: 1, title: { display: true, text: '概率' }}
+            }
+          }
+        });
+
+        // 表情分布饼图
+        const summaryCtx = document.getElementById('summaryChart').getContext('2d');
+        const emotionTotals = {};
+        expressionLabels.forEach(label => emotionTotals[label] = 0);
+        
+        validData.forEach(data => {
+          Object.entries(data.expressions).forEach(([emotion, value]) => {
+            emotionTotals[emotion] += value;
+          });
+        });
+
+        const averages = expressionLabels.map(label => emotionTotals[label] / validData.length);
+        
+        new Chart(summaryCtx, {
+          type: 'doughnut',
+          data: {
+            labels: expressionLabelsZH,
+            datasets: [{
+              data: averages,
+              backgroundColor: [
+                'rgba(108, 117, 125, 0.8)', 'rgba(255, 193, 7, 0.8)', 'rgba(52, 144, 220, 0.8)',
+                'rgba(220, 53, 69, 0.8)', 'rgba(111, 66, 193, 0.8)', 'rgba(40, 167, 69, 0.8)', 'rgba(253, 126, 20, 0.8)'
+              ]
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { position: 'right' }}
+          }
+        });
+      }
+
+      // 生成音频图表
+      function generateAudioCharts() {
+        if (audioHistory.length === 0) return;
+
+        const validData = audioHistory.filter(d => d.features && d.features.rms !== undefined);
+        if (validData.length === 0) return;
+
+        debugLog(`生成音频图表，有效数据点: ${validData.length}`);
+        
+        // 输出时间戳范围用于调试
+        if (validData.length > 0) {
+          const firstTime = validData[0].timestamp;
+          const lastTime = validData[validData.length - 1].timestamp;
+          debugLog(`音频数据时间范围: ${firstTime.toFixed(2)}s - ${lastTime.toFixed(2)}s`);
+        }
+
+        // 时域特征
+        generateTimedomainCharts(validData);
+        
+        // 频谱特征
+        generateSpectralCharts(validData);
+        
+        // 高级特征
+        generateAdvancedCharts(validData);
+      }
+
+      // 生成时域特征图表（修复时间戳问题）
+      function generateTimedomainCharts(data) {
+        // 时域特征时间线
+        const timedomainCtx = document.getElementById('timedomainChart').getContext('2d');
+        
+        // 检查数据和时间戳
+        console.log('时域图表数据sample:', data.slice(0, 5).map(d => ({
+          timestamp: d.timestamp,
+          rms: d.features.rms,
+          zcr: d.features.zcr
+        })));
+        
+        new Chart(timedomainCtx, {
+          type: 'line',
+          data: {
+            datasets: [
+              {
+                label: 'RMS',
+                data: data.map(d => ({ x: d.timestamp, y: d.features.rms || 0 })),
+                borderColor: 'rgba(255, 99, 132, 1)',
+                backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                yAxisID: 'y',
+                tension: 0.1,
+                pointRadius: 1
+              },
+              {
+                label: 'ZCR',
+                data: data.map(d => ({ x: d.timestamp, y: d.features.zcr || 0 })),
+                borderColor: 'rgba(54, 162, 235, 1)',
+                backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                yAxisID: 'y1',
+                tension: 0.1,
+                pointRadius: 1
+              },
+              {
+                label: 'Energy',
+                data: data.map(d => ({ x: d.timestamp, y: d.features.energy || 0 })),
+                borderColor: 'rgba(255, 206, 86, 1)',
+                backgroundColor: 'rgba(255, 206, 86, 0.1)',
+                yAxisID: 'y2',
+                tension: 0.1,
+                pointRadius: 1
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+              intersect: false,
+              mode: 'index'
+            },
+            scales: {
+              x: { 
+                type: 'linear',
+                title: { display: true, text: '时间 (秒)' },
+                min: 0  // 确保从0开始
+              },
+              y: { type: 'linear', display: true, position: 'left', title: { display: true, text: 'RMS' }},
+              y1: { type: 'linear', display: true, position: 'right', title: { display: true, text: 'ZCR' }},
+              y2: { type: 'linear', display: false }
+            }
+          }
+        });
+
+        // RMS分布直方图
+        const rmsData = data.map(d => d.features.rms).filter(v => v !== undefined);
+        const rmsHist = createHistogram(rmsData, 20);
+        const rmsCtx = document.getElementById('rmsDistChart').getContext('2d');
+        new Chart(rmsCtx, {
+          type: 'bar',
+          data: {
+            labels: rmsHist.labels,
+            datasets: [{
+              label: '频次',
+              data: rmsHist.counts,
+              backgroundColor: 'rgba(255, 99, 132, 0.6)',
+              borderColor: 'rgba(255, 99, 132, 1)',
+              borderWidth: 1
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              x: { title: { display: true, text: 'RMS 值' }},
+              y: { title: { display: true, text: '频次' }}
+            }
+          }
+        });
+
+        // 过零率分析
+        const zcrCtx = document.getElementById('zcrChart').getContext('2d');
+        new Chart(zcrCtx, {
+          type: 'line',
+          data: {
+            datasets: [{
+              label: '过零率',
+              data: data.map(d => ({ x: d.timestamp, y: d.features.zcr || 0 })),
+              borderColor: 'rgba(54, 162, 235, 1)',
+              backgroundColor: 'rgba(54, 162, 235, 0.1)',
+              tension: 0.1,
+              pointRadius: 1
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              x: { 
+                type: 'linear',
+                title: { display: true, text: '时间 (秒)' },
+                min: 0
+              },
+              y: { title: { display: true, text: 'ZCR' }}
+            }
+          }
+        });
+      }
+
+      // 生成频谱特征图表
+      function generateSpectralCharts(data) {
+        // 频谱特征时间线
+        const spectralTimelineCtx = document.getElementById('spectralTimelineChart').getContext('2d');
+        new Chart(spectralTimelineCtx, {
+          type: 'line',
+          data: {
+            datasets: [
+              {
+                label: '频谱质心',
+                data: data.map(d => ({ x: d.timestamp, y: d.features.spectralCentroid || 0 })),
+                borderColor: 'rgba(255, 206, 86, 1)',
+                yAxisID: 'y',
+                tension: 0.1,
+                pointRadius: 1
+              },
+              {
+                label: '频谱平坦度',
+                data: data.map(d => ({ x: d.timestamp, y: d.features.spectralFlatness || 0 })),
+                borderColor: 'rgba(75, 192, 192, 1)',
+                yAxisID: 'y1',
+                tension: 0.1,
+                pointRadius: 1
+              },
+              {
+                label: '频谱滚降点',
+                data: data.map(d => ({ x: d.timestamp, y: d.features.spectralRolloff || 0 })),
+                borderColor: 'rgba(153, 102, 255, 1)',
+                yAxisID: 'y',
+                tension: 0.1,
+                pointRadius: 1
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              x: { 
+                type: 'linear',
+                title: { display: true, text: '时间 (秒)' },
+                min: 0
+              },
+              y: { type: 'linear', display: true, position: 'left', title: { display: true, text: '频率 (Hz)' }},
+              y1: { type: 'linear', display: true, position: 'right', title: { display: true, text: '平坦度' }}
+            }
+          }
+        });
+
+        // 频谱质心分布
+        const centroidData = data.map(d => d.features.spectralCentroid).filter(v => v !== undefined);
+        const centroidHist = createHistogram(centroidData, 15);
+        const centroidCtx = document.getElementById('spectralCentroidChart').getContext('2d');
+        new Chart(centroidCtx, {
+          type: 'bar',
+          data: {
+            labels: centroidHist.labels,
+            datasets: [{
+              label: '频次',
+              data: centroidHist.counts,
+              backgroundColor: 'rgba(255, 206, 86, 0.6)',
+              borderColor: 'rgba(255, 206, 86, 1)',
+              borderWidth: 1
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              x: { title: { display: true, text: '频谱质心 (Hz)' }},
+              y: { title: { display: true, text: '频次' }}
+            }
+          }
+        });
+
+        // 频谱平坦度
+        const flatnessCtx = document.getElementById('spectralFlatnessChart').getContext('2d');
+        new Chart(flatnessCtx, {
+          type: 'line',
+          data: {
+            datasets: [{
+              label: '频谱平坦度',
+              data: data.map(d => ({ x: d.timestamp, y: d.features.spectralFlatness || 0 })),
+              borderColor: 'rgba(75, 192, 192, 1)',
+              backgroundColor: 'rgba(75, 192, 192, 0.1)',
+              tension: 0.1,
+              pointRadius: 1
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              x: { 
+                type: 'linear',
+                title: { display: true, text: '时间 (秒)' },
+                min: 0
+              },
+              y: { title: { display: true, text: '平坦度' }}
+            }
+          }
+        });
+      }
+
+      // 生成高级特征图表
+      function generateAdvancedCharts(data) {
+        // MFCC 热力图
+        generateMFCCHeatmap(data);
+        
+        // 色度特征
+        generateChromaChart(data);
+        
+        // 响度分析
+        generateLoudnessChart(data);
+      }
+
+      // 生成MFCC热力图
+      function generateMFCCHeatmap(data) {
+        const mfccData = data.filter(d => d.features.mfcc && Array.isArray(d.features.mfcc));
+        if (mfccData.length === 0) return;
+
+        const ctx = document.getElementById('mfccHeatmapChart').getContext('2d');
+        
+        // 创建简化的MFCC可视化（作为线图）
+        const mfccDatasets = [];
+        for (let i = 0; i < 13; i++) {
+          mfccDatasets.push({
+            label: `MFCC ${i + 1}`,
+            data: mfccData.map(d => ({ x: d.timestamp, y: d.features.mfcc[i] || 0 })),
+            borderColor: `hsl(${i * 30}, 70%, 50%)`,
+            backgroundColor: `hsla(${i * 30}, 70%, 50%, 0.1)`,
+            tension: 0.1,
+            pointRadius: 0
+          });
+        }
+
+        new Chart(ctx, {
+          type: 'line',
+          data: { datasets: mfccDatasets },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              title: { display: true, text: 'MFCC 系数时间变化' },
+              legend: { position: 'right' }
+            },
+            scales: {
+              x: { 
+                type: 'linear',
+                title: { display: true, text: '时间 (秒)' },
+                min: 0
+              },
+              y: { title: { display: true, text: 'MFCC 系数值' }}
+            }
+          }
+        });
+      }
+
+      // 生成色度图表
+      function generateChromaChart(data) {
+        const chromaData = data.filter(d => d.features.chroma && Array.isArray(d.features.chroma));
+        if (chromaData.length === 0) return;
+
+        const ctx = document.getElementById('chromaChart').getContext('2d');
+        
+        // 计算平均色度向量
+        const avgChroma = Array(12).fill(0);
+        chromaData.forEach(d => {
+          d.features.chroma.forEach((val, i) => {
+            if (i < 12) avgChroma[i] += val;
+          });
+        });
+        avgChroma.forEach((val, i) => avgChroma[i] /= chromaData.length);
+
+        const chromaLabels = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+        new Chart(ctx, {
+          type: 'radar',
+          data: {
+            labels: chromaLabels,
+            datasets: [{
+              label: '平均色度',
+              data: avgChroma,
+              fill: true,
+              backgroundColor: 'rgba(255, 99, 132, 0.2)',
+              borderColor: 'rgba(255, 99, 132, 1)',
+              pointBackgroundColor: 'rgba(255, 99, 132, 1)',
+              pointBorderColor: '#fff',
+              pointHoverBackgroundColor: '#fff',
+              pointHoverBorderColor: 'rgba(255, 99, 132, 1)'
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false }},
+            scales: {
+              r: {
+                beginAtZero: true,
+                title: { display: true, text: '强度' }
+              }
+            }
+          }
+        });
+      }
+
+      // 生成响度图表
+      function generateLoudnessChart(data) {
+        const loudnessData = data.filter(d => 
+          d.features.loudness && 
+          d.features.loudness.specific && 
+          Array.isArray(d.features.loudness.specific)
+        );
+        if (loudnessData.length === 0) return;
+
+        const ctx = document.getElementById('loudnessChart').getContext('2d');
+        
+        // 计算平均响度分布
+        const avgLoudness = Array(24).fill(0);
+        loudnessData.forEach(d => {
+          d.features.loudness.specific.forEach((val, i) => {
+            if (i < 24) avgLoudness[i] += val;
+          });
+        });
+        avgLoudness.forEach((val, i) => avgLoudness[i] /= loudnessData.length);
+
+        const barkLabels = Array.from({length: 24}, (_, i) => `Bark ${i + 1}`);
+
+        new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: barkLabels,
+            datasets: [{
+              label: '平均响度',
+              data: avgLoudness,
+              backgroundColor: 'rgba(153, 102, 255, 0.6)',
+              borderColor: 'rgba(153, 102, 255, 1)',
+              borderWidth: 1
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false }},
+            scales: {
+              x: { 
+                title: { display: true, text: 'Bark 频段' },
+                display: false
+              },
+              y: { title: { display: true, text: '响度' }}
+            }
+          }
+        });
+      }
+
+      // 创建直方图数据
+      function createHistogram(data, bins) {
+        const min = Math.min(...data);
+        const max = Math.max(...data);
+        const binSize = (max - min) / bins;
+        
+        const counts = Array(bins).fill(0);
+        const labels = [];
+        
+        for (let i = 0; i < bins; i++) {
+          labels.push((min + i * binSize).toFixed(3));
+        }
+        
+        data.forEach(value => {
+          const bin = Math.min(Math.floor((value - min) / binSize), bins - 1);
+          counts[bin]++;
+        });
+        
+        return { labels, counts };
+      }
+
+      // 初始化导出功能
+      function initializeExportButtons() {
+        // 导出完整数据
+        document.getElementById('exportData').addEventListener('click', () => {
+          const dataToExport = {
+            metadata: {
+              totalFrames: emotionHistory.length,
+              audioFrames: audioHistory.length,
+              duration: video.duration,
+              exportTime: new Date().toISOString()
+            },
+            emotionData: emotionHistory,
+            audioData: audioHistory
+          };
+          
+          const blob = new Blob([JSON.stringify(dataToExport, null, 2)], { 
+            type: 'application/json' 
+          });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `multimodal-analysis-${Date.now()}.json`;
+          a.click();
+          URL.revokeObjectURL(url);
+        });
+
+        // 导出音频特征CSV
+        document.getElementById('exportAudioData').addEventListener('click', () => {
+          if (audioHistory.length === 0) {
+            alert('没有音频数据可导出');
+            return;
+          }
+          
+          const csvHeader = ['timestamp', ...audioFeatures.flatMap(feature => {
+            const sample = audioHistory.find(d => d.features && d.features[feature]);
+            if (!sample) return [feature];
+            
+            const value = sample.features[feature];
+            if (Array.isArray(value)) {
+              return value.map((_, i) => `${feature}_${i}`);
+            } else if (typeof value === 'object' && value !== null) {
+              return Object.keys(value).map(key => `${feature}_${key}`);
+            } else {
+              return [feature];
+            }
+          })];
+          
+          const csvRows = [csvHeader.join(',')];
+          
+          audioHistory.forEach(row => {
+            const values = [row.timestamp];
+            audioFeatures.forEach(feature => {
+              const value = row.features ? row.features[feature] : null;
+              if (Array.isArray(value)) {
+                values.push(...value.map(v => v || 0));
+              } else if (typeof value === 'object' && value !== null) {
+                Object.values(value).forEach(v => values.push(v || 0));
+              } else {
+                values.push(value || 0);
+              }
+            });
+            csvRows.push(values.join(','));
+          });
+          
+          const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `audio-features-${Date.now()}.csv`;
+          a.click();
+          URL.revokeObjectURL(url);
+        });
+
+        // 导出图表
+        document.getElementById('exportChart').addEventListener('click', () => {
+          const timelineCanvas = document.getElementById('timelineChart');
+          const link = document.createElement('a');
+          link.download = `analysis-timeline-${Date.now()}.png`;
+          link.href = timelineCanvas.toDataURL();
+          link.click();
+        });
+      }
+    });
+  </script>
+</body>
+</html>
