@@ -76,8 +76,9 @@ cd "$BASE"
 echo "BASE=${BASE}"
 echo "BT_ENV_NAME=${BT_ENV_NAME}"
 echo "LOG_DIR=${LOG_DIR}"
-echo "logs: ${LOG_DIR}/web_8000.log ${LOG_DIR}/web_8001.log ${LOG_DIR}/asr_legacy_8002.log ${LOG_DIR}/llm_8003.log ${LOG_DIR}/tts_8004.log ${LOG_DIR}/scoring_8005.log ${LOG_DIR}/asr_new_8006.log"
-start_bg web_8000 "$PYTHON_BIN" mao_demo_server.py
+echo "logs: ${LOG_DIR}/web_8000.log ${LOG_DIR}/web_8010.log ${LOG_DIR}/web_8001.log ${LOG_DIR}/asr_legacy_8002.log ${LOG_DIR}/llm_8003.log ${LOG_DIR}/tts_8004.log ${LOG_DIR}/scoring_8005.log ${LOG_DIR}/asr_new_8006.log"
+start_bg web_8000 env WEB_PORT=8000 WEB_MODE=page "$PYTHON_BIN" mao_demo_server.py
+start_bg web_8010 env WEB_PORT=8010 WEB_MODE=assets "$PYTHON_BIN" mao_demo_server.py
 start_bg web_8001 "$PYTHON_BIN" -m http.server 8001
 
 cd "$BASE/backend"
@@ -88,6 +89,8 @@ start_bg scoring_8005 "$PYTHON_BIN" asr_server.py
 start_bg asr_new_8006 "$PYTHON_BIN" asr_new.py
 
 echo "urls:"
-echo "  - http://127.0.0.1:8000/mao_demo.html"
-echo "  - http://127.0.0.1:8000/chat_interface.html"
+echo "  - http://127.0.0.1:8000/mao_demo.html?live2dPort=8010"
+echo "  - http://127.0.0.1:8000/chat_interface.html?live2dPort=8010"
+echo "  - http://127.0.0.1:8001/chat_interface.html?live2dPort=8010"
+echo "  - http://127.0.0.1:8010/"
 wait

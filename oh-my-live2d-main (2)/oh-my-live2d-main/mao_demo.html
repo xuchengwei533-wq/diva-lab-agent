@@ -147,7 +147,16 @@
     <!-- 左侧：小人区域 -->
     <div class="left-stage">
       <!-- 载入 live2d -->
-      <script src="packages/oh-my-live2d/dist/index.min.js"></script>
+      <script>
+        (function () {
+          const params = new URLSearchParams(location.search || '');
+          const host = (location && location.hostname) ? location.hostname : 'localhost';
+          const live2dPort = params.get('live2dPort');
+          const base = live2dPort ? `${location.protocol}//${host}:${live2dPort}` : location.origin;
+          window.__LIVE2D_ASSET_BASE__ = base;
+          document.write(`<script src="${base}/packages/oh-my-live2d/dist/index.min.js"><\/script>`);
+        })();
+      </script>
     </div>
 
     <!-- 右侧：PDF 教案显示区域 -->
@@ -171,11 +180,19 @@
 
   <script>
     // ====== 1) 初始化 Live2D（基本沿用你原来的配置） ======
+    const LIVE2D_ASSET_BASE = window.__LIVE2D_ASSET_BASE__ || location.origin;
+    (function () {
+      const params = new URLSearchParams(location.search || '');
+      const live2dPort = params.get('live2dPort');
+      if (!live2dPort) return;
+      const link = document.querySelector('.chat-link-btn');
+      if (link) link.href = `chat_interface.html?live2dPort=${encodeURIComponent(live2dPort)}`;
+    })();
     const oml2d = OML2D.loadOml2d({
       importType: 'cubism5',
       models: [
         {
-          path: 'mao_pro_en/runtime/mao_pro.model3.json',
+          path: `${LIVE2D_ASSET_BASE}/mao_pro_en/runtime/mao_pro.model3.json`,
           scale: 0.10,
           position: [0, 0],
           showHitAreaFrames: true,

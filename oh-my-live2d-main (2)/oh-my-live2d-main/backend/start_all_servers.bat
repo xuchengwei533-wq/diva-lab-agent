@@ -1,6 +1,6 @@
 @echo off
 echo ========================================
-echo 启动 Oh-My-Live2D 所有后端服务
+echo 启动 Oh-My-Live2D 所有服务
 echo ========================================
 echo.
 
@@ -36,6 +36,8 @@ if not exist .env (
 
 echo ========================================
 echo 启动服务列表:
+echo 0. 前端页面服务 (端口8000) - mao_demo/chat_interface 页面
+echo 0b. Live2D资源服务 (端口8010) - 模型/JS静态资源
 echo 1. ASR服务 (端口8002) - 语音识别 (Legacy)
 echo 2. LLM聊天服务 (端口8003) - 对话生成
 echo 3. TTS服务 (端口8004) - 文本转语音
@@ -43,6 +45,14 @@ echo 4. CAM-S评分服务 (端口8005) - 音频评分
 echo 5. 新版ASR服务 (端口8006) - 语音识别
 echo ========================================
 echo.
+
+echo 正在启动 前端页面服务 (端口8000)...
+start "WEB-Page-8000" cmd /k "cd /d .. & set WEB_PORT=8000 & set WEB_MODE=page & python mao_demo_server.py"
+timeout /t 1 /nobreak >nul
+
+echo 正在启动 Live2D资源服务 (端口8010)...
+start "WEB-Assets-8010" cmd /k "cd /d .. & set WEB_PORT=8010 & set WEB_MODE=assets & python mao_demo_server.py"
+timeout /t 1 /nobreak >nul
 
 echo 正在启动 ASR 服务 (端口8002)...
 start "ASR-Server-8002" cmd /k "python main.py"
@@ -69,8 +79,9 @@ echo ========================================
 echo 所有服务启动完成！
 echo ========================================
 echo 服务地址:
-echo - Demo主页: http://localhost:8000/mao_demo.html
-echo - 聊天界面: http://localhost:8000/chat_interface.html
+echo - Demo主页: http://localhost:8000/mao_demo.html?live2dPort=8010
+echo - 聊天界面(8000): http://localhost:8000/chat_interface.html?live2dPort=8010
+echo - Live2D资源(8010): http://localhost:8010/
 echo - ASR服务(Legacy): http://localhost:8002
 echo - LLM聊天: http://localhost:8003
 echo - TTS服务: ws://localhost:8004/ws/tts

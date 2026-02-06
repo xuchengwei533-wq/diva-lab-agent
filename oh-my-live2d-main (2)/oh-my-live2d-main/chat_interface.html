@@ -501,7 +501,16 @@
   </div>
 
   <!-- live2d（可选） -->
-  <script src="packages/oh-my-live2d/dist/index.min.js"></script>
+  <script>
+    (function () {
+      const params = new URLSearchParams(location.search || '');
+      const host = (location && location.hostname) ? location.hostname : 'localhost';
+      const live2dPort = params.get('live2dPort');
+      const base = live2dPort ? `${location.protocol}//${host}:${live2dPort}` : location.origin;
+      window.__LIVE2D_ASSET_BASE__ = base;
+      document.write(`<script src="${base}/packages/oh-my-live2d/dist/index.min.js"><\/script>`);
+    })();
+  </script>
   <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.0/lame.min.js"></script>
 
   <script>
@@ -790,11 +799,12 @@
     let oml2d = null;
     try {
       if (window.OML2D) {
+        const LIVE2D_ASSET_BASE = window.__LIVE2D_ASSET_BASE__ || location.origin;
         oml2d = OML2D.loadOml2d({
           importType: 'cubism5',
           models: [
             {
-              path: 'mao_pro_en/runtime/mao_pro.model3.json',
+              path: `${LIVE2D_ASSET_BASE}/mao_pro_en/runtime/mao_pro.model3.json`,
               scale: 0.07,
               position: [0, 0],
               showHitAreaFrames: false,
@@ -807,7 +817,11 @@
     } catch (e) {
       console.warn('Live2D 初始化失败（可忽略）:', e);
     }
-    function goBack() { window.location.href = 'mao_demo.html'; }
+    function goBack() {
+      const params = new URLSearchParams(location.search || '');
+      const live2dPort = params.get('live2dPort');
+      window.location.href = live2dPort ? `mao_demo.html?live2dPort=${encodeURIComponent(live2dPort)}` : 'mao_demo.html';
+    }
     (function bindBackClick() {
       const container = document.getElementById('oml2d-container');
       if (container) container.addEventListener('click', goBack);
