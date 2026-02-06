@@ -139,6 +139,9 @@ VOICE_TYPE_ALIASES = {
     "mezzo": "女中音 Mezzo",
     "tenor": "男高音 Tenor",
     "baritone": "男中音 Baritone",
+    "alto": "女中音 Mezzo",
+    "bass": "男中音 Baritone",
+    "mao": "女高音 Soprano",
 }
 
 
