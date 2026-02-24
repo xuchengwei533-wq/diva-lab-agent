@@ -1,1268 +1,1663 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>滴哇 - 聊天界面</title>
-  <script defer src="https://unpkg.com/face-api.js@0.22.2/dist/face-api.min.js"></script>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>滴哇 - 聊天界面</title>
+    <script
+      defer
+      src="https://unpkg.com/face-api.js@0.22.2/dist/face-api.min.js"
+    ></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
 
-    body {
-      font-family: 'Microsoft YaHei', Arial, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      height: 100vh;
-      overflow: hidden;
-    }
+      body {
+        font-family: "Microsoft YaHei", Arial, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        height: 100vh;
+        overflow: hidden;
+      }
 
-    .back-link-btn {
-      position: fixed;
-      top: 20px;
-      left: 20px;
-      z-index: 10000;
-      background: linear-gradient(135deg, #ff6b6b, #ee5a24);
-      color: white;
-      padding: 8px 16px;
-      border-radius: 20px;
-      text-decoration: none;
-      font-size: 14px;
-      font-weight: bold;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
-      transition: all 0.3s ease;
-      border: none;
-      cursor: pointer;
-    }
-    .back-link-btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
-      background: linear-gradient(135deg, #ee5a24, #ff6b6b);
-    }
+      .back-link-btn {
+        position: fixed;
+        top: 20px;
+        left: 20px;
+        z-index: 10000;
+        background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+        color: white;
+        padding: 8px 16px;
+        border-radius: 20px;
+        text-decoration: none;
+        font-size: 14px;
+        font-weight: bold;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        transition: all 0.3s ease;
+        border: none;
+        cursor: pointer;
+      }
+      .back-link-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+        background: linear-gradient(135deg, #ee5a24, #ff6b6b);
+      }
 
-    .container {
-      display: flex;
-      height: 100vh;
-      padding: 20px;
-      gap: 20px;
-    }
+      .container {
+        display: flex;
+        height: 100vh;
+        padding: 20px;
+        gap: 20px;
+      }
 
-    .character-section {
-      flex: 0 0 35%;
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 20px;
-      backdrop-filter: blur(10px);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-    }
-    .character-title {
-      color: white;
-      font-size: 24px;
-      margin-bottom: 20px;
-      text-align: center;
-    }
-    .character-info {
-      color: rgba(255, 255, 255, 0.8);
-      font-size: 14px;
-      text-align: center;
-      margin-top: 20px;
-      line-height: 1.5;
-    }
-    #oml2d-container {
-      width: 100%;
-      height: 400px;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      cursor: pointer;
-    }
+      .character-section {
+        flex: 0 0 35%;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 20px;
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      }
+      .character-title {
+        color: white;
+        font-size: 24px;
+        margin-bottom: 20px;
+        text-align: center;
+      }
+      .character-info {
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 14px;
+        text-align: center;
+        margin-top: 20px;
+        line-height: 1.5;
+      }
+      #oml2d-container {
+        width: 100%;
+        height: 400px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        cursor: pointer;
+      }
 
-    .chat-section {
-      flex: 0 0 65%;
-      background: rgba(255, 255, 255, 0.95);
-      border-radius: 20px;
-      display: flex;
-      flex-direction: column;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-    }
+      .chat-section {
+        flex: 0 0 65%;
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 20px;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+      }
 
-    .chat-header {
-      padding: 20px;
-      border-bottom: 1px solid #e0e0e0;
-      background: white;
-      border-radius: 20px 20px 0 0;
-    }
-    .chat-title { font-size: 20px; font-weight: bold; color: #333; }
-    .chat-subtitle { font-size: 14px; color: #666; margin-top: 5px; }
+      .chat-header {
+        padding: 20px;
+        border-bottom: 1px solid #e0e0e0;
+        background: white;
+        border-radius: 20px 20px 0 0;
+      }
+      .chat-title {
+        font-size: 20px;
+        font-weight: bold;
+        color: #333;
+      }
+      .chat-subtitle {
+        font-size: 14px;
+        color: #666;
+        margin-top: 5px;
+      }
 
-    .chat-messages {
-      flex: 1;
-      padding: 20px;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 15px;
-    }
-    .message {
-      max-width: 70%;
-      padding: 12px 16px;
-      border-radius: 18px;
-      line-height: 1.4;
-      word-wrap: break-word;
-      white-space: pre-wrap;
-    }
-    .message-bot {
-      align-self: flex-start;
-      background: #f0f0f0;
-      color: #333;
-      border-bottom-left-radius: 4px;
-    }
-    .message-user {
-      align-self: flex-end;
-      background: #667eea;
-      color: white;
-      border-bottom-right-radius: 4px;
-    }
+      .chat-messages {
+        flex: 1;
+        padding: 20px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+      }
+      .message {
+        max-width: 70%;
+        padding: 12px 16px;
+        border-radius: 18px;
+        line-height: 1.4;
+        word-wrap: break-word;
+        white-space: pre-wrap;
+      }
+      .message-bot {
+        align-self: flex-start;
+        background: #f0f0f0;
+        color: #333;
+        border-bottom-left-radius: 4px;
+      }
+      .message-user {
+        align-self: flex-end;
+        background: #667eea;
+        color: white;
+        border-bottom-right-radius: 4px;
+      }
 
-    .chat-input-area {
-      padding: 20px;
-      border-top: 1px solid #e0e0e0;
-      background: white;
-      border-radius: 0 0 20px 20px;
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-    .input-group {
-      display: flex;
-      gap: 10px;
-      flex: 1 1 520px;
-      min-width: 320px;
-    }
-    .chat-input {
-      flex: 1;
-      padding: 12px 16px;
-      border: 1px solid #ddd;
-      border-radius: 25px;
-      outline: none;
-      font-size: 14px;
-      transition: border-color 0.3s;
-    }
-    .chat-input:focus { border-color: #667eea; }
-    .send-button {
-      padding: 12px 24px;
-      background: #667eea;
-      color: white;
-      border: none;
-      border-radius: 25px;
-      cursor: pointer;
-      font-size: 14px;
-      transition: background 0.3s;
-      white-space: nowrap;
-    }
-    .send-button:hover { background: #5a6fd8; }
+      .chat-input-area {
+        padding: 20px;
+        border-top: 1px solid #e0e0e0;
+        background: white;
+        border-radius: 0 0 20px 20px;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .input-group {
+        display: flex;
+        gap: 10px;
+        flex: 1 1 520px;
+        min-width: 320px;
+      }
+      .chat-input {
+        flex: 1;
+        padding: 12px 16px;
+        border: 1px solid #ddd;
+        border-radius: 25px;
+        outline: none;
+        font-size: 14px;
+        transition: border-color 0.3s;
+      }
+      .chat-input:focus {
+        border-color: #667eea;
+      }
+      .send-button {
+        padding: 12px 24px;
+        background: #667eea;
+        color: white;
+        border: none;
+        border-radius: 25px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: background 0.3s;
+        white-space: nowrap;
+      }
+      .send-button:hover {
+        background: #5a6fd8;
+      }
 
-    .voice-button {
-      padding: 12px;
-      background: #ff6b6b;
-      color: white;
-      border: none;
-      border-radius: 50%;
-      cursor: pointer;
-      font-size: 16px;
-      width: 44px;
-      height: 44px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.3s;
-      flex: 0 0 auto;
-    }
-    .voice-button:hover { background: #ee5a24; transform: scale(1.1); }
-    .voice-button.recording { background: #ff4757; animation: pulse 1.5s infinite; }
-    @keyframes pulse {
-      0% { transform: scale(1); }
-      50% { transform: scale(1.1); }
-      100% { transform: scale(1); }
-    }
-    .voice-status {
-      font-size: 12px;
-      color: #666;
-      text-align: center;
-      margin-top: 5px;
-      flex: 1 1 200px;
-      min-width: 180px;
-    }
+      .voice-button {
+        padding: 12px;
+        background: #ff6b6b;
+        color: white;
+        border: none;
+        border-radius: 50%;
+        cursor: pointer;
+        font-size: 16px;
+        width: 44px;
+        height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s;
+        flex: 0 0 auto;
+      }
+      .voice-button:hover {
+        background: #ee5a24;
+        transform: scale(1.1);
+      }
+      .voice-button.recording {
+        background: #ff4757;
+        animation: pulse 1.5s infinite;
+      }
+      @keyframes pulse {
+        0% {
+          transform: scale(1);
+        }
+        50% {
+          transform: scale(1.1);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+      .voice-status {
+        font-size: 12px;
+        color: #666;
+        text-align: center;
+        margin-top: 5px;
+        flex: 1 1 200px;
+        min-width: 180px;
+      }
 
-    .audio-score-trigger {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      border: none;
-      border-radius: 50%;
-      width: 40px;
-      height: 40px;
-      font-size: 16px;
-      cursor: pointer;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-      transition: all 0.3s ease;
-      flex: 0 0 auto;
-    }
-    .audio-score-trigger:hover {
-      transform: scale(1.1);
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-    }
-    #ttsToggle {
-      background: linear-gradient(135deg, #2ed573 0%, #1e90ff 100%);
-    }
+      .audio-score-trigger {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        font-size: 16px;
+        cursor: pointer;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        transition: all 0.3s ease;
+        flex: 0 0 auto;
+      }
+      .audio-score-trigger:hover {
+        transform: scale(1.1);
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+      }
+      #ttsToggle {
+        background: linear-gradient(135deg, #2ed573 0%, #1e90ff 100%);
+      }
 
-    .audio-scoring-modal {
-      display: none;
-      position: fixed;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
-      background: rgba(0, 0, 0, 0.5);
-      z-index: 10000;
-      justify-content: center;
-      align-items: center;
-    }
-    .audio-scoring-modal.active { display: flex; }
+      .audio-scoring-modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 10000;
+        justify-content: center;
+        align-items: center;
+      }
+      .audio-scoring-modal.active {
+        display: flex;
+      }
 
-    .audio-scoring-section {
-      background: white;
-      border-radius: 15px;
-      padding: 30px;
-      width: 800px;
-      max-width: 95%;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-      position: relative;
-      max-height: 90vh;
-      overflow-y: auto;
-      overflow-x: hidden;
-    }
-    .scoring-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 20px;
-      padding-bottom: 10px;
-      border-bottom: 1px solid #eee;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-    .close-modal {
-      background: #ff6b6b;
-      color: white;
-      border: none;
-      width: 30px;
-      height: 30px;
-      border-radius: 50%;
-      font-size: 18px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .close-modal:hover { background: #ff5252; }
+      .audio-scoring-section {
+        background: white;
+        border-radius: 15px;
+        padding: 30px;
+        width: 800px;
+        max-width: 95%;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        position: relative;
+        max-height: 90vh;
+        overflow-y: auto;
+        overflow-x: hidden;
+      }
+      .scoring-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #eee;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .close-modal {
+        background: #ff6b6b;
+        color: white;
+        border: none;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        font-size: 18px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .close-modal:hover {
+        background: #ff5252;
+      }
 
-    .loading { text-align: center; padding: 20px; color: #666; }
-    .error { color: #ff6b6b; font-size: 12px; margin-top: 5px; }
+      .loading {
+        text-align: center;
+        padding: 20px;
+        color: #666;
+      }
+      .error {
+        color: #ff6b6b;
+        font-size: 12px;
+        margin-top: 5px;
+      }
 
-    .voice-selection { margin-bottom: 10px; }
-    .voice-selection label { display: block; margin-bottom: 5px; font-size: 12px; color: #555; }
-    .voice-select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px; background: white; }
+      .voice-selection {
+        margin-bottom: 10px;
+      }
+      .voice-selection label {
+        display: block;
+        margin-bottom: 5px;
+        font-size: 12px;
+        color: #555;
+      }
+      .voice-select {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        background: white;
+      }
 
-    .file-upload { margin-bottom: 10px; }
-    .file-input { display: none; }
-    .file-label {
-      display: block;
-      padding: 10px;
-      background: #667eea;
-      color: white;
-      border-radius: 5px;
-      text-align: center;
-      cursor: pointer;
-      transition: background 0.3s;
-    }
-    .file-label:hover { background: #5a6fd8; }
+      .file-upload {
+        margin-bottom: 10px;
+      }
+      .file-input {
+        display: none;
+      }
+      .file-label {
+        display: block;
+        padding: 10px;
+        background: #667eea;
+        color: white;
+        border-radius: 5px;
+        text-align: center;
+        cursor: pointer;
+        transition: background 0.3s;
+      }
+      .file-label:hover {
+        background: #5a6fd8;
+      }
 
-    .score-button {
-      width: 100%;
-      padding: 10px;
-      background: #ff6b6b;
-      color: white;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-      font-size: 14px;
-      transition: background 0.3s;
-    }
-    .score-button:hover { background: #ee5a24; }
+      .score-button {
+        width: 100%;
+        padding: 10px;
+        background: #ff6b6b;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: background 0.3s;
+      }
+      .score-button:hover {
+        background: #ee5a24;
+      }
 
-    .scoring-results {
-      margin-top: 15px;
-      padding-top: 15px;
-      border-top: 1px solid #eee;
-      max-height: 600px;
-      overflow-y: auto;
-    }
-    .overall-score { text-align: center; margin-bottom: 15px; }
-    .score-label { font-size: 14px; color: #666; }
-    .score-value { font-size: 24px; font-weight: bold; color: #667eea; }
+      .scoring-results {
+        margin-top: 15px;
+        padding-top: 15px;
+        border-top: 1px solid #eee;
+        max-height: 600px;
+        overflow-y: auto;
+      }
+      .overall-score {
+        text-align: center;
+        margin-bottom: 15px;
+      }
+      .score-label {
+        font-size: 14px;
+        color: #666;
+      }
+      .score-value {
+        font-size: 24px;
+        font-weight: bold;
+        color: #667eea;
+      }
 
-    .technique { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-top: 10px; }
-    .technique-item {
-      padding: 10px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      border-radius: 8px;
-      text-align: center;
-      font-size: 12px;
-      color: white;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-    }
-    .technique-name { font-weight: bold; font-size: 11px; margin-bottom: 4px; }
-    .technique-score {
-      font-size: 14px;
-      font-weight: bold;
-      background: rgba(255, 255, 255, 0.2);
-      border-radius: 4px;
-      padding: 2px 4px;
-    }
+      .technique {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .technique-item {
+        padding: 10px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 8px;
+        text-align: center;
+        font-size: 12px;
+        color: white;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+      .technique-name {
+        font-weight: bold;
+        font-size: 11px;
+        margin-bottom: 4px;
+      }
+      .technique-score {
+        font-size: 14px;
+        font-weight: bold;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 4px;
+        padding: 2px 4px;
+      }
 
-    .chart-container {
-      text-align: center;
-      margin-top: 20px;
-      padding: 15px;
-      background: #f9f9f9;
-      border-radius: 8px;
-      border: 1px solid #e0e0e0;
-    }
-    .chart-title { font-weight: bold; color: #333; margin-bottom: 15px; font-size: 14px; }
-    .chart-bars {
-      display: flex;
-      justify-content: space-around;
-      align-items: flex-end;
-      height: 180px;
-      padding: 0 30px;
-      margin-bottom: 5px;
-      border-left: 2px solid #333;
-      border-bottom: 2px solid #333;
-      position: relative;
-      overflow-x: auto;
-      gap: 10px;
-    }
-    .chart-bar-item { display: flex; flex-direction: column; align-items: center; margin: 0 5px; min-width: 60px; }
-    .chart-bar {
-      width: 35px;
-      background: linear-gradient(to top, #4CAF50, #8BC34A);
-      border-radius: 4px 4px 0 0;
-      border: 1px solid #388E3C;
-      transition: height 0.5s ease;
-    }
-    .chart-bar-label {
-      font-size: 10px;
-      color: #333;
-      margin-top: 5px;
-      max-width: 80px;
-      text-align: center;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .chart-bar-value { font-size: 11px; font-weight: bold; color: #333; margin-bottom: 3px; }
-    .chart-y-axis { display: flex; justify-content: space-between; padding: 0 30px; font-size: 10px; color: #666; margin-top: 5px; }
-    .chart-y-axis span { width: 20px; text-align: center; }
+      .chart-container {
+        text-align: center;
+        margin-top: 20px;
+        padding: 15px;
+        background: #f9f9f9;
+        border-radius: 8px;
+        border: 1px solid #e0e0e0;
+      }
+      .chart-title {
+        font-weight: bold;
+        color: #333;
+        margin-bottom: 15px;
+        font-size: 14px;
+      }
+      .chart-bars {
+        display: flex;
+        justify-content: space-around;
+        align-items: flex-end;
+        height: 180px;
+        padding: 0 30px;
+        margin-bottom: 5px;
+        border-left: 2px solid #333;
+        border-bottom: 2px solid #333;
+        position: relative;
+        overflow-x: auto;
+        gap: 10px;
+      }
+      .chart-bar-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin: 0 5px;
+        min-width: 60px;
+      }
+      .chart-bar {
+        width: 35px;
+        background: linear-gradient(to top, #4caf50, #8bc34a);
+        border-radius: 4px 4px 0 0;
+        border: 1px solid #388e3c;
+        transition: height 0.5s ease;
+      }
+      .chart-bar-label {
+        font-size: 10px;
+        color: #333;
+        margin-top: 5px;
+        max-width: 80px;
+        text-align: center;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .chart-bar-value {
+        font-size: 11px;
+        font-weight: bold;
+        color: #333;
+        margin-bottom: 3px;
+      }
+      .chart-y-axis {
+        display: flex;
+        justify-content: space-between;
+        padding: 0 30px;
+        font-size: 10px;
+        color: #666;
+        margin-top: 5px;
+      }
+      .chart-y-axis span {
+        width: 20px;
+        text-align: center;
+      }
 
-    .emotion-live {
-      margin-top: 15px;
-      padding: 15px;
-      background: #f9f9f9;
-      border-radius: 8px;
-      border: 1px solid #e0e0e0;
-    }
-    .emotion-video-wrap {
-      width: 100%;
-      position: relative;
-      background: #000;
-      border-radius: 8px;
-      overflow: hidden;
-      height: 220px;
-    }
-    .emotion-video-wrap video {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      display: block;
-    }
-    #emotionVideo {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      display: block;
-    }
-    .emotion-status {
-      margin-top: 10px;
-      font-size: 12px;
-      color: #666;
-      text-align: center;
-    }
+      .emotion-live {
+        margin-top: 15px;
+        padding: 15px;
+        background: #f9f9f9;
+        border-radius: 8px;
+        border: 1px solid #e0e0e0;
+      }
+      .emotion-video-wrap {
+        width: 100%;
+        position: relative;
+        background: #000;
+        border-radius: 8px;
+        overflow: hidden;
+        height: 220px;
+      }
+      .emotion-video-wrap video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+      #emotionVideo {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+      .emotion-status {
+        margin-top: 10px;
+        font-size: 12px;
+        color: #666;
+        text-align: center;
+      }
 
-    :root {
-      --kid-happy: #FFD93D;
-      --kid-voice: #4CC9F0;
-      --kid-stable: #6BCB77;
-      --kid-clear: #9D4EDD;
-      --kid-shadow: 0 8px 0 rgba(0, 0, 0, 0.12);
-      --kid-radius: 24px;
-    }
+      :root {
+        --kid-happy: #ffd93d;
+        --kid-voice: #4cc9f0;
+        --kid-stable: #6bcb77;
+        --kid-clear: #9d4edd;
+        --kid-shadow: 0 8px 0 rgba(0, 0, 0, 0.12);
+        --kid-radius: 24px;
+      }
 
-    .kid-section-title {
-      font-size: 14px;
-      font-weight: 900;
-      color: #333;
-      margin: 16px 0 10px;
-    }
+      .kid-section-title {
+        font-size: 14px;
+        font-weight: 900;
+        color: #333;
+        margin: 16px 0 10px;
+      }
 
-    .kid-toy-table {
-      display: flex;
-      gap: 12px;
-      flex-wrap: wrap;
-      justify-content: center;
-      width: 100%;
-    }
+      .kid-toy-table {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        justify-content: center;
+        width: 100%;
+      }
 
-    .kid-toy-block {
-      background: white;
-      border-radius: var(--kid-radius);
-      padding: 14px 14px 12px;
-      width: 150px;
-      min-height: 130px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      box-shadow: var(--kid-shadow);
-      transition: transform 0.2s;
-      text-align: center;
-    }
+      .kid-toy-block {
+        background: white;
+        border-radius: var(--kid-radius);
+        padding: 14px 14px 12px;
+        width: 150px;
+        min-height: 130px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        box-shadow: var(--kid-shadow);
+        transition: transform 0.2s;
+        text-align: center;
+      }
 
-    .kid-toy-block:active {
-      transform: translateY(4px);
-      box-shadow: 0 4px 0 rgba(0, 0, 0, 0.12);
-    }
+      .kid-toy-block:active {
+        transform: translateY(4px);
+        box-shadow: 0 4px 0 rgba(0, 0, 0, 0.12);
+      }
 
-    .kid-toy-block.kid-blue { background: var(--kid-voice); color: white; }
-    .kid-toy-block.kid-green { background: var(--kid-stable); color: white; }
-    .kid-toy-block.kid-purple { background: var(--kid-clear); color: white; }
+      .kid-toy-block.kid-blue {
+        background: var(--kid-voice);
+        color: white;
+      }
+      .kid-toy-block.kid-green {
+        background: var(--kid-stable);
+        color: white;
+      }
+      .kid-toy-block.kid-purple {
+        background: var(--kid-clear);
+        color: white;
+      }
 
-    .kid-block-icon { font-size: 32px; margin-bottom: 8px; }
-    .kid-block-title { font-size: 14px; font-weight: 900; opacity: 0.95; }
-    .kid-block-value { font-size: 22px; font-weight: 900; margin-top: 6px; line-height: 1.2; }
-    .kid-block-sub { font-size: 11px; opacity: 0.92; margin-top: 6px; }
+      .kid-block-icon {
+        font-size: 32px;
+        margin-bottom: 8px;
+      }
+      .kid-block-title {
+        font-size: 14px;
+        font-weight: 900;
+        opacity: 0.95;
+      }
+      .kid-block-value {
+        font-size: 22px;
+        font-weight: 900;
+        margin-top: 6px;
+        line-height: 1.2;
+      }
+      .kid-block-sub {
+        font-size: 11px;
+        opacity: 0.92;
+        margin-top: 6px;
+      }
 
-    .kid-emotion-rainbow {
-      display: flex;
-      justify-content: center;
-      gap: 10px;
-      background: white;
-      padding: 12px 16px;
-      border-radius: 40px;
-      box-shadow: var(--kid-shadow);
-      width: 100%;
-      overflow-x: auto;
-    }
+      .kid-emotion-rainbow {
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+        background: white;
+        padding: 12px 16px;
+        border-radius: 40px;
+        box-shadow: var(--kid-shadow);
+        width: 100%;
+        overflow-x: auto;
+      }
 
-    .kid-emotion-item {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: flex-end;
-      width: 54px;
-      height: 96px;
-      position: relative;
-      flex: 0 0 auto;
-    }
+      .kid-emotion-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-end;
+        width: 54px;
+        height: 96px;
+        position: relative;
+        flex: 0 0 auto;
+      }
 
-    .kid-emotion-bar-bg {
-      width: 18px;
-      height: 58px;
-      background: #eee;
-      border-radius: 10px;
-      position: relative;
-      overflow: hidden;
-      margin-top: auto;
-    }
+      .kid-emotion-bar-bg {
+        width: 18px;
+        height: 58px;
+        background: #eee;
+        border-radius: 10px;
+        position: relative;
+        overflow: hidden;
+        margin-top: auto;
+      }
 
-    .kid-emotion-bar-fill {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      width: 100%;
-      height: 0%;
-      border-radius: 10px;
-      transition: height 0.3s ease;
-    }
+      .kid-emotion-bar-fill {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: 0%;
+        border-radius: 10px;
+        transition: height 0.3s ease;
+      }
 
-    .kid-emotion-icon {
-      font-size: 30px;
-      margin-bottom: 8px;
-      transition: transform 0.2s;
-    }
+      .kid-emotion-icon {
+        font-size: 30px;
+        margin-bottom: 8px;
+        transition: transform 0.2s;
+      }
 
-    .kid-emotion-item.active .kid-emotion-icon {
-      transform: scale(1.35);
-    }
-  </style>
-</head>
+      .kid-emotion-item.active .kid-emotion-icon {
+        transform: scale(1.35);
+      }
+    </style>
+  </head>
 
-<body>
-  <a href="http://localhost:8000/mao_demo.html" class="back-link-btn">🏠 返回主页</a>
+  <body>
+    <a href="http://localhost:8000/mao_demo.html" class="back-link-btn"
+      >🏠 返回主页</a
+    >
 
-  <div class="container">
-    <div class="character-section">
-      <h2 class="character-title">滴哇老师</h2>
-      <div id="oml2d-container" title="点击角色区域返回主页"></div>
-      <div class="character-info">
-        <p>我是你的声乐老师滴哇</p>
-        <p>随时为你提供声乐指导</p>
-        <p>点击我可以回到主页哦~</p>
-      </div>
-    </div>
-
-    <div class="chat-section">
-      <div class="chat-header">
-        <div class="chat-title">与滴哇老师对话</div>
-        <div class="chat-subtitle">随时为你提供专业的声乐指导</div>
-      </div>
-
-      <div class="chat-messages" id="chatMessages">
-        <div class="message message-bot">
-          你好！我是你的声乐老师滴哇，很高兴为你服务！有什么声乐方面的问题都可以问我哦~
+    <div class="container">
+      <div class="character-section">
+        <h2 class="character-title">滴哇老师</h2>
+        <div id="oml2d-container" title="点击角色区域返回主页"></div>
+        <div class="character-info">
+          <p>我是你的声乐老师滴哇</p>
+          <p>随时为你提供声乐指导</p>
+          <p>点击我可以回到主页哦~</p>
         </div>
       </div>
 
-      <div class="chat-input-area">
-        <div class="input-group">
-          <input type="text" class="chat-input" id="messageInput"
-                 placeholder="输入你想说的话..." onkeypress="handleKeyPress(event)" />
-          <button class="send-button" onclick="sendMessage()">发送</button>
+      <div class="chat-section">
+        <div class="chat-header">
+          <div class="chat-title">与滴哇老师对话</div>
+          <div class="chat-subtitle">随时为你提供专业的声乐指导</div>
         </div>
 
-        <button class="voice-button" id="voiceButton" title="语音输入">🎤</button>
-        <div class="voice-status" id="voiceStatus">点击麦克风开始录音</div>
+        <div class="chat-messages" id="chatMessages">
+          <div class="message message-bot">
+            你好！我是你的声乐老师滴哇，很高兴为你服务！有什么声乐方面的问题都可以问我哦~
+          </div>
+        </div>
 
-        <button class="audio-score-trigger" id="ttsToggle" title="语音播报开关">🔇</button>
-        <button class="audio-score-trigger" id="scoreLastRecordingTrigger" title="录音并评分" onclick="toggleScoreRecording()">🎼</button>
-        <button class="audio-score-trigger" id="audioScoreTrigger" title="音频评分" onclick="openAudioScoringModal()">📊</button>
+        <div class="chat-input-area">
+          <div class="input-group">
+            <input
+              type="text"
+              class="chat-input"
+              id="messageInput"
+              placeholder="输入你想说的话..."
+              onkeypress="handleKeyPress(event)"
+            />
+            <button class="send-button" onclick="sendMessage()">发送</button>
+          </div>
+
+          <button class="voice-button" id="voiceButton" title="语音输入">
+            🎤
+          </button>
+          <div class="voice-status" id="voiceStatus">点击麦克风开始录音</div>
+
+          <button
+            class="audio-score-trigger"
+            id="ttsToggle"
+            title="语音播报开关"
+          >
+            🔇
+          </button>
+          <button
+            class="audio-score-trigger"
+            id="scoreLastRecordingTrigger"
+            title="录音并评分"
+            onclick="toggleScoreRecording()"
+          >
+            🎼
+          </button>
+          <button
+            class="audio-score-trigger"
+            id="audioScoreTrigger"
+            title="音频评分"
+            onclick="openAudioScoringModal()"
+          >
+            📊
+          </button>
+        </div>
       </div>
-    </div>
 
-    <div class="audio-scoring-modal" id="audioScoringModal">
-      <div class="audio-scoring-section">
-        <div class="scoring-header">
-          <div>
-            <h3>🎤 音频评分功能</h3>
-            <p style="color:#666;font-size:12px;margin-top:6px;">上传音频文件进行演唱技巧评分</p>
-          </div>
-          <button class="close-modal" id="closeModal" title="关闭" onclick="closeAudioScoringModal()">×</button>
-        </div>
-
-        <div class="scoring-controls">
-          <div class="voice-selection">
-            <label for="voiceType">选择声部:</label>
-            <select id="voiceType" class="voice-select">
-              <option value="女高音 Soprano">女高音 Soprano</option>
-              <option value="女中音 Mezzo">女中音 Mezzo</option>
-              <option value="男高音 Tenor">男高音 Tenor</option>
-              <option value="男中音 Baritone">男中音 Baritone</option>
-            </select>
-          </div>
-
-          <div class="file-upload">
-            <input type="file" id="audioFile" accept="audio/*" class="file-input" />
-            <label for="audioFile" class="file-label">📁 选择音频文件</label>
-          </div>
-
-          <button class="score-button" onclick="startScoring()">开始评分</button>
-        </div>
-
-        <div class="emotion-live" id="emotionLive" style="display:none;">
-          <div class="chart-title">实时视频情感分析</div>
-          <div class="emotion-video-wrap">
-            <video id="emotionVideo" autoplay playsinline muted></video>
-          </div>
-          <div class="emotion-status" id="emotionStatus">未启动</div>
-        </div>
-
-        <div class="scoring-results" id="scoringResults" style="display:none;">
-          <h4>评分结果</h4>
-          <div class="results-container">
-            <div class="overall-score">
-              <span class="score-label">总体均分:</span>
-              <span class="score-value" id="overallScore">-</span>
+      <div class="audio-scoring-modal" id="audioScoringModal">
+        <div class="audio-scoring-section">
+          <div class="scoring-header">
+            <div>
+              <h3>🎤 音频评分功能</h3>
+              <p style="color: #666; font-size: 12px; margin-top: 6px">
+                上传音频文件进行演唱技巧评分
+              </p>
             </div>
-            <div class="kid-section-title">🎵 三个小积木评分</div>
-            <div class="kid-toy-table" id="techniqueScores"></div>
+            <button
+              class="close-modal"
+              id="closeModal"
+              title="关闭"
+              onclick="closeAudioScoringModal()"
+            >
+              ×
+            </button>
+          </div>
 
-            <div class="kid-section-title">😊 情感小彩虹</div>
-            <div class="kid-emotion-rainbow" id="emotionRainbow" style="display:none;"></div>
+          <div class="scoring-controls">
+            <div class="voice-selection">
+              <label for="voiceType">选择声部:</label>
+              <select id="voiceType" class="voice-select">
+                <option value="女高音 Soprano">女高音 Soprano</option>
+                <option value="女中音 Mezzo">女中音 Mezzo</option>
+                <option value="男高音 Tenor">男高音 Tenor</option>
+                <option value="男中音 Baritone">男中音 Baritone</option>
+              </select>
+            </div>
 
-            <div class="chart-container" id="emotionPieContainer" style="display:none;">
-              <div class="chart-title">表情情感分布</div>
-              <div style="height:260px;position:relative;">
-                <canvas id="emotionPieChart"></canvas>
+            <div class="file-upload">
+              <input
+                type="file"
+                id="audioFile"
+                accept="audio/*"
+                class="file-input"
+              />
+              <label for="audioFile" class="file-label">📁 选择音频文件</label>
+            </div>
+
+            <button class="score-button" onclick="startScoring()">
+              开始评分
+            </button>
+          </div>
+
+          <div class="emotion-live" id="emotionLive" style="display: none">
+            <div class="chart-title">实时视频情感分析</div>
+            <div class="emotion-video-wrap">
+              <video id="emotionVideo" autoplay playsinline muted></video>
+            </div>
+            <div class="emotion-status" id="emotionStatus">未启动</div>
+          </div>
+
+          <div
+            class="scoring-results"
+            id="scoringResults"
+            style="display: none"
+          >
+            <h4>评分结果</h4>
+            <div class="results-container">
+              <div class="overall-score">
+                <span class="score-label">总体均分:</span>
+                <span class="score-value" id="overallScore">-</span>
+              </div>
+              <div class="kid-section-title">🎵 三个小积木评分</div>
+              <div class="kid-toy-table" id="techniqueScores"></div>
+
+              <div class="kid-section-title">😊 情感小彩虹</div>
+              <div
+                class="kid-emotion-rainbow"
+                id="emotionRainbow"
+                style="display: none"
+              ></div>
+
+              <div
+                class="chart-container"
+                id="emotionPieContainer"
+                style="display: none"
+              >
+                <div class="chart-title">表情情感分布</div>
+                <div style="height: 260px; position: relative">
+                  <canvas id="emotionPieChart"></canvas>
+                </div>
               </div>
             </div>
           </div>
         </div>
-
       </div>
-    </div>
 
-    <div class="audio-scoring-modal" id="scoreVoiceModal">
-      <div class="audio-scoring-section" style="width:520px;max-width:95%;">
-        <div class="scoring-header">
-          <div>
-            <h3>🎼 录音并评分</h3>
-            <p style="color:#666;font-size:12px;margin-top:6px;">请选择声部后开始录音评分</p>
-          </div>
-          <button class="close-modal" title="关闭" onclick="closeScoreVoiceModal()">×</button>
-        </div>
-
-        <div class="scoring-controls">
-          <div class="voice-selection">
-            <label for="scoreVoiceType">选择声部:</label>
-            <select id="scoreVoiceType" class="voice-select">
-              <option value="女高音 Soprano">女高音 Soprano</option>
-              <option value="女中音 Mezzo">女中音 Mezzo</option>
-              <option value="男高音 Tenor">男高音 Tenor</option>
-              <option value="男中音 Baritone">男中音 Baritone</option>
-            </select>
-          </div>
-
-          <button class="score-button" id="scoreVoiceStartBtn" onclick="confirmScoreVoiceAndStart()">开始录音评分</button>
-          <button class="score-button" id="scoreVoiceStopBtn" style="margin-top:10px;display:none;" onclick="stopScoreRecordingFromModal()">停止录音</button>
-          <button class="score-button" id="scoreVoiceCancelBtn" style="margin-top:10px;background:#999;" onclick="closeScoreVoiceModal()">取消</button>
-        </div>
-
-        <div class="emotion-live" id="scoreEmotionLive" style="display:none;">
-          <div class="chart-title">实时视频情感分析</div>
-          <div class="emotion-video-wrap">
-            <video id="scoreEmotionVideo" autoplay playsinline muted></video>
-          </div>
-          <div class="emotion-status" id="scoreEmotionStatus">未启动</div>
-        </div>
-
-        <div class="scoring-results" id="scoreScoringResults" style="display:none;">
-          <h4>评分结果</h4>
-          <div class="results-container">
-            <div class="overall-score">
-              <span class="score-label">总体均分:</span>
-              <span class="score-value" id="scoreOverallScore">-</span>
+      <div class="audio-scoring-modal" id="scoreVoiceModal">
+        <div class="audio-scoring-section" style="width: 520px; max-width: 95%">
+          <div class="scoring-header">
+            <div>
+              <h3>🎼 录音并评分</h3>
+              <p style="color: #666; font-size: 12px; margin-top: 6px">
+                请选择声部后开始录音评分
+              </p>
             </div>
-            <div class="kid-section-title">🎵 三个小积木评分</div>
-            <div class="kid-toy-table" id="scoreTechniqueScores"></div>
+            <button
+              class="close-modal"
+              title="关闭"
+              onclick="closeScoreVoiceModal()"
+            >
+              ×
+            </button>
+          </div>
 
-            <div class="kid-section-title">😊 情感小彩虹</div>
-            <div class="kid-emotion-rainbow" id="scoreEmotionRainbow" style="display:none;"></div>
+          <div class="scoring-controls">
+            <div class="voice-selection">
+              <label for="scoreVoiceType">选择声部:</label>
+              <select id="scoreVoiceType" class="voice-select">
+                <option value="女高音 Soprano">女高音 Soprano</option>
+                <option value="女中音 Mezzo">女中音 Mezzo</option>
+                <option value="男高音 Tenor">男高音 Tenor</option>
+                <option value="男中音 Baritone">男中音 Baritone</option>
+              </select>
+            </div>
 
-            <div class="chart-container" id="scoreEmotionPieContainer" style="display:none;">
-              <div class="chart-title">表情情感分布</div>
-              <div style="height:260px;position:relative;">
-                <canvas id="scoreEmotionPieChart"></canvas>
+            <button
+              class="score-button"
+              id="scoreVoiceStartBtn"
+              onclick="confirmScoreVoiceAndStart()"
+            >
+              开始录音评分
+            </button>
+            <button
+              class="score-button"
+              id="scoreVoiceStopBtn"
+              style="margin-top: 10px; display: none"
+              onclick="stopScoreRecordingFromModal()"
+            >
+              停止录音
+            </button>
+            <button
+              class="score-button"
+              id="scoreVoiceCancelBtn"
+              style="margin-top: 10px; background: #999"
+              onclick="closeScoreVoiceModal()"
+            >
+              取消
+            </button>
+          </div>
+
+          <div class="emotion-live" id="scoreEmotionLive" style="display: none">
+            <div class="chart-title">实时视频情感分析</div>
+            <div class="emotion-video-wrap">
+              <video id="scoreEmotionVideo" autoplay playsinline muted></video>
+            </div>
+            <div class="emotion-status" id="scoreEmotionStatus">未启动</div>
+          </div>
+
+          <div
+            class="scoring-results"
+            id="scoreScoringResults"
+            style="display: none"
+          >
+            <h4>评分结果</h4>
+            <div class="results-container">
+              <div class="overall-score">
+                <span class="score-label">总体均分:</span>
+                <span class="score-value" id="scoreOverallScore">-</span>
+              </div>
+              <div class="kid-section-title">🎵 三个小积木评分</div>
+              <div class="kid-toy-table" id="scoreTechniqueScores"></div>
+
+              <div class="kid-section-title">😊 情感小彩虹</div>
+              <div
+                class="kid-emotion-rainbow"
+                id="scoreEmotionRainbow"
+                style="display: none"
+              ></div>
+
+              <div
+                class="chart-container"
+                id="scoreEmotionPieContainer"
+                style="display: none"
+              >
+                <div class="chart-title">表情情感分布</div>
+                <div style="height: 260px; position: relative">
+                  <canvas id="scoreEmotionPieChart"></canvas>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- live2d（可选） -->
-  <script>
-    (function () {
-      const params = new URLSearchParams(location.search || '');
-      const host = (location && location.hostname) ? location.hostname : 'localhost';
-      const live2dPort = params.get('live2dPort');
-      const base = live2dPort ? `${location.protocol}//${host}:${live2dPort}` : location.origin;
-      window.__LIVE2D_ASSET_BASE__ = base;
-      document.write(`<script src="${base}/packages/oh-my-live2d/dist/index.min.js"><\/script>`);
-    })();
-  </script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.0/lame.min.js"></script>
+    <!-- live2d（可选） -->
+    <script>
+      (function () {
+        const params = new URLSearchParams(location.search || "");
+        const host =
+          location && location.hostname ? location.hostname : "localhost";
+        const live2dPort = params.get("live2dPort");
+        const base = live2dPort
+          ? `${location.protocol}//${host}:${live2dPort}`
+          : location.origin;
+        window.__LIVE2D_ASSET_BASE__ = base;
+        document.write(
+          `<script src="${base}/packages/oh-my-live2d/dist/index.min.js"><\/script>`,
+        );
+      })();
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.0/lame.min.js"></script>
 
-  <script>
-    // =========================
-    // 后端地址配置
-    // =========================
-    const HOST = (location && location.hostname) ? location.hostname : 'localhost';
-    const API_BASE = `http://${HOST}:8005`;       // 评分服务 (asr_server.py)
-    const VOICE_API_URL = `http://${HOST}:8006`;  // ASR 服务 (asr_new.py)
-    const CHAT_API_URL  = `http://${HOST}:8003`;
+    <script>
+      // =========================
+      // 后端地址配置
+      // =========================
+      const HOST =
+        location && location.hostname ? location.hostname : "localhost";
+      const API_BASE = `http://${HOST}:8005`; // 评分服务 (asr_server.py)
+      const VOICE_API_URL = `http://${HOST}:8006`; // ASR 服务 (asr_new.py)
+      const CHAT_API_URL = `http://${HOST}:8003`;
 
-    // =========================
-    // 流式 TTS：ws://localhost:8004/ws/tts
-    // =========================
-    const TTS_WS_URL = `ws://localhost:8004/ws/tts?voice=Cherry&model=qwen3-tts-flash&language_type=Chinese`;
-    const TTS_COMMIT_MIN_CHARS = 12;
+      // =========================
+      // 流式 TTS：ws://localhost:8004/ws/tts
+      // =========================
+      const TTS_WS_URL = `ws://localhost:8004/ws/tts?voice=Cherry&model=qwen3-tts-flash&language_type=Chinese`;
+      const TTS_COMMIT_MIN_CHARS = 12;
 
-    let ttsEnabled = false;
-    let ttsSocket = null;
-    let ttsPlayer = null;
-    let ttsTextBuf = '';
-    let ttsFlushTimer = null;
-    let ttsReconnectTimer = null;
-    let ttsAudioEl = null;
+      let ttsEnabled = false;
+      let ttsSocket = null;
+      let ttsPlayer = null;
+      let ttsTextBuf = "";
+      let ttsFlushTimer = null;
+      let ttsReconnectTimer = null;
+      let ttsAudioEl = null;
 
-    // ======== 关键修复 1：稳健 little-endian PCM 解码 ========
-    function base64ToInt16Array(b64) {
-      const bin = atob(b64);
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      // ======== 关键修复 1：稳健 little-endian PCM 解码 ========
+      function base64ToInt16Array(b64) {
+        const bin = atob(b64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
 
-      const n = Math.floor(bytes.byteLength / 2);
-      const out = new Int16Array(n);
-      const view = new DataView(bytes.buffer);
-      for (let i = 0; i < n; i++) out[i] = view.getInt16(i * 2, true);
-      return out;
-    }
-
-    // ======== 关键修复 2：合并分片 + 预缓冲 + 重采样，避免“断裂/抖动” ========
-    class PcmStreamPlayer {
-      constructor(inputSampleRate = 24000) {
-        const Ctx = window.AudioContext || window.webkitAudioContext;
-        this.ctx = new Ctx();                 // 不强制 sampleRate，自动适配系统
-        this.inRate = inputSampleRate;
-        this.outRate = this.ctx.sampleRate;
-
-        this.queue = [];                      // Int16Array[]
-        this.queuedSamples = 0;
-
-        this.minBufferSec = 0.10;             // 每次至少合并 100ms 再播放（关键）
-        this.startBufferSec = 0.12;           // 首包预缓冲 120ms
-        this.nextTime = 0;
-      }
-
-      async ensureRunning() {
-        if (this.ctx.state !== "running") await this.ctx.resume();
-      }
-
-      getScheduledEndTimeSec() {
-        return this.nextTime || this.ctx.currentTime;
-      }
-
-      resetSchedule() {
-        const now = this.ctx.currentTime;
-        this.nextTime = now + this.startBufferSec;
-        this.queue = [];
-        this.queuedSamples = 0;
-      }
-
-      pushPcm16(int16Arr) {
-        if (!int16Arr || int16Arr.length === 0) return;
-        this.queue.push(int16Arr);
-        this.queuedSamples += int16Arr.length;
-
-        const needSamples = Math.floor(this.inRate * this.minBufferSec);
-        if (this.queuedSamples >= needSamples) {
-          const merged = this._mergeQueue();
-          const float32 = this._toFloatAndResampleIfNeeded(merged);
-          this._playFloat32(float32);
-        }
-      }
-
-      _mergeQueue() {
-        const out = new Int16Array(this.queuedSamples);
-        let off = 0;
-        for (const chunk of this.queue) {
-          out.set(chunk, off);
-          off += chunk.length;
-        }
-        this.queue = [];
-        this.queuedSamples = 0;
+        const n = Math.floor(bytes.byteLength / 2);
+        const out = new Int16Array(n);
+        const view = new DataView(bytes.buffer);
+        for (let i = 0; i < n; i++) out[i] = view.getInt16(i * 2, true);
         return out;
       }
 
-      _toFloatAndResampleIfNeeded(int16) {
-        const f = new Float32Array(int16.length);
-        for (let i = 0; i < int16.length; i++) f[i] = int16[i] / 32768;
+      // ======== 关键修复 2：合并分片 + 预缓冲 + 重采样，避免“断裂/抖动” ========
+      class PcmStreamPlayer {
+        constructor(inputSampleRate = 24000) {
+          const Ctx = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new Ctx(); // 不强制 sampleRate，自动适配系统
+          this.inRate = inputSampleRate;
+          this.outRate = this.ctx.sampleRate;
 
-        if (this.inRate === this.outRate) return f;
+          this.queue = []; // Int16Array[]
+          this.queuedSamples = 0;
 
-        // 线性重采样：24k -> ctx.sampleRate（通常 48k），避免变调/怪声/抖动
-        const ratio = this.outRate / this.inRate;
-        const outLen = Math.max(1, Math.floor(f.length * ratio));
-        const out = new Float32Array(outLen);
-
-        for (let i = 0; i < outLen; i++) {
-          const src = i / ratio;
-          const i0 = Math.floor(src);
-          const i1 = Math.min(i0 + 1, f.length - 1);
-          const t = src - i0;
-          out[i] = f[i0] * (1 - t) + f[i1] * t;
+          this.minBufferSec = 0.1; // 每次至少合并 100ms 再播放（关键）
+          this.startBufferSec = 0.12; // 首包预缓冲 120ms
+          this.nextTime = 0;
         }
-        return out;
-      }
 
-      _playFloat32(float32) {
-        const buffer = this.ctx.createBuffer(1, float32.length, this.outRate);
-        buffer.copyToChannel(float32, 0);
+        async ensureRunning() {
+          if (this.ctx.state !== "running") await this.ctx.resume();
+        }
 
-        const src = this.ctx.createBufferSource();
-        src.buffer = buffer;
-        src.connect(this.ctx.destination);
+        getScheduledEndTimeSec() {
+          return this.nextTime || this.ctx.currentTime;
+        }
 
-        const now = this.ctx.currentTime;
-        if (this.nextTime < now + 0.02) this.nextTime = now + 0.02;
+        resetSchedule() {
+          const now = this.ctx.currentTime;
+          this.nextTime = now + this.startBufferSec;
+          this.queue = [];
+          this.queuedSamples = 0;
+        }
 
-        src.start(this.nextTime);
-        this.nextTime += buffer.duration;
-      }
-    }
+        pushPcm16(int16Arr) {
+          if (!int16Arr || int16Arr.length === 0) return;
+          this.queue.push(int16Arr);
+          this.queuedSamples += int16Arr.length;
 
-    function scheduleTtsReconnect() {
-      if (!ttsEnabled) return;
-      if (ttsReconnectTimer) return;
-      ttsReconnectTimer = setTimeout(async () => {
-        ttsReconnectTimer = null;
-        try { await connectTts(); } catch (_) {}
-      }, 600);
-    }
-
-    async function connectTts() {
-      if (ttsSocket && (ttsSocket.readyState === WebSocket.OPEN || ttsSocket.readyState === WebSocket.CONNECTING)) return;
-
-      ttsPlayer = ttsPlayer || new PcmStreamPlayer(24000);
-      await ttsPlayer.ensureRunning();
-
-      ttsSocket = new WebSocket(TTS_WS_URL);
-
-      ttsSocket.onopen = () => {
-        console.log('[TTS] ws open');
-        if (ttsPlayer) ttsPlayer.resetSchedule();
-      };
-
-      ttsSocket.onerror = (e) => {
-        console.error('[TTS] ws error', e);
-      };
-
-      ttsSocket.onclose = () => {
-        console.log('[TTS] ws close');
-        // 展示用：断线自动重连，避免你现场一断就没声音
-        scheduleTtsReconnect();
-      };
-
-      ttsSocket.onmessage = (evt) => {
-        let msg;
-        try { msg = JSON.parse(evt.data); } catch { return; }
-
-        console.log("[TTS] <-", msg.type);
-
-        if (msg.type === 'response.audio.delta' && msg.delta) {
-          try {
-            const int16 = base64ToInt16Array(msg.delta);
-            ttsPlayer.pushPcm16(int16);
-          } catch (e) {
-            console.warn("[TTS] delta decode failed", e);
+          const needSamples = Math.floor(this.inRate * this.minBufferSec);
+          if (this.queuedSamples >= needSamples) {
+            const merged = this._mergeQueue();
+            const float32 = this._toFloatAndResampleIfNeeded(merged);
+            this._playFloat32(float32);
           }
-          return;
         }
 
-        if (msg.type === 'response.segment.done') {
-          scheduleSegmentAck(msg.segment_id);
-          return;
+        _mergeQueue() {
+          const out = new Int16Array(this.queuedSamples);
+          let off = 0;
+          for (const chunk of this.queue) {
+            out.set(chunk, off);
+            off += chunk.length;
+          }
+          this.queue = [];
+          this.queuedSamples = 0;
+          return out;
         }
 
-        if (msg.type === 'error') {
-          console.error('[TTS] error:', msg.error);
-        }
-      };
-    }
+        _toFloatAndResampleIfNeeded(int16) {
+          const f = new Float32Array(int16.length);
+          for (let i = 0; i < int16.length; i++) f[i] = int16[i] / 32768;
 
-    function closeTts() {
-      try {
-        if (ttsReconnectTimer) { clearTimeout(ttsReconnectTimer); ttsReconnectTimer = null; }
-        if (ttsFlushTimer) { clearInterval(ttsFlushTimer); ttsFlushTimer = null; }
-        try {
-          for (const t of ttsSegmentAckTimers.values()) clearTimeout(t);
-          ttsSegmentAckTimers.clear();
-        } catch (_) {}
-        if (ttsSocket && ttsSocket.readyState === WebSocket.OPEN) {
-          try { ttsSocket.send(JSON.stringify({ type: "session.finish" })); } catch (_) {}
-          ttsSocket.close();
+          if (this.inRate === this.outRate) return f;
+
+          // 线性重采样：24k -> ctx.sampleRate（通常 48k），避免变调/怪声/抖动
+          const ratio = this.outRate / this.inRate;
+          const outLen = Math.max(1, Math.floor(f.length * ratio));
+          const out = new Float32Array(outLen);
+
+          for (let i = 0; i < outLen; i++) {
+            const src = i / ratio;
+            const i0 = Math.floor(src);
+            const i1 = Math.min(i0 + 1, f.length - 1);
+            const t = src - i0;
+            out[i] = f[i0] * (1 - t) + f[i1] * t;
+          }
+          return out;
         }
-      } catch (_) {}
-      ttsSocket = null;
-      ttsTextBuf = '';
-      if (ttsAudioEl) {
-        ttsAudioEl.pause();
-        ttsAudioEl = null;
+
+        _playFloat32(float32) {
+          const buffer = this.ctx.createBuffer(1, float32.length, this.outRate);
+          buffer.copyToChannel(float32, 0);
+
+          const src = this.ctx.createBufferSource();
+          src.buffer = buffer;
+          src.connect(this.ctx.destination);
+
+          const now = this.ctx.currentTime;
+          if (this.nextTime < now + 0.02) this.nextTime = now + 0.02;
+
+          src.start(this.nextTime);
+          this.nextTime += buffer.duration;
+        }
       }
-    }
-    let ttsSegmentAckTimers = new Map();
 
-    function sendPlaybackEnded(segmentId) {
-      try {
+      function scheduleTtsReconnect() {
+        if (!ttsEnabled) return;
+        if (ttsReconnectTimer) return;
+        ttsReconnectTimer = setTimeout(async () => {
+          ttsReconnectTimer = null;
+          try {
+            await connectTts();
+          } catch (_) {}
+        }, 600);
+      }
+
+      async function connectTts() {
+        if (
+          ttsSocket &&
+          (ttsSocket.readyState === WebSocket.OPEN ||
+            ttsSocket.readyState === WebSocket.CONNECTING)
+        )
+          return;
+
+        ttsPlayer = ttsPlayer || new PcmStreamPlayer(24000);
+        await ttsPlayer.ensureRunning();
+
+        ttsSocket = new WebSocket(TTS_WS_URL);
+
+        ttsSocket.onopen = () => {
+          console.log("[TTS] ws open");
+          if (ttsPlayer) ttsPlayer.resetSchedule();
+        };
+
+        ttsSocket.onerror = (e) => {
+          console.error("[TTS] ws error", e);
+        };
+
+        ttsSocket.onclose = () => {
+          console.log("[TTS] ws close");
+          // 展示用：断线自动重连，避免你现场一断就没声音
+          scheduleTtsReconnect();
+        };
+
+        ttsSocket.onmessage = (evt) => {
+          let msg;
+          try {
+            msg = JSON.parse(evt.data);
+          } catch {
+            return;
+          }
+
+          console.log("[TTS] <-", msg.type);
+
+          if (msg.type === "response.audio.delta" && msg.delta) {
+            try {
+              const int16 = base64ToInt16Array(msg.delta);
+              ttsPlayer.pushPcm16(int16);
+            } catch (e) {
+              console.warn("[TTS] delta decode failed", e);
+            }
+            return;
+          }
+
+          if (msg.type === "response.segment.done") {
+            scheduleSegmentAck(msg.segment_id);
+            return;
+          }
+
+          if (msg.type === "error") {
+            console.error("[TTS] error:", msg.error);
+          }
+        };
+      }
+
+      function closeTts() {
+        try {
+          if (ttsReconnectTimer) {
+            clearTimeout(ttsReconnectTimer);
+            ttsReconnectTimer = null;
+          }
+          if (ttsFlushTimer) {
+            clearInterval(ttsFlushTimer);
+            ttsFlushTimer = null;
+          }
+          try {
+            for (const t of ttsSegmentAckTimers.values()) clearTimeout(t);
+            ttsSegmentAckTimers.clear();
+          } catch (_) {}
+          if (ttsSocket && ttsSocket.readyState === WebSocket.OPEN) {
+            try {
+              ttsSocket.send(JSON.stringify({ type: "session.finish" }));
+            } catch (_) {}
+            ttsSocket.close();
+          }
+        } catch (_) {}
+        ttsSocket = null;
+        ttsTextBuf = "";
+        if (ttsAudioEl) {
+          ttsAudioEl.pause();
+          ttsAudioEl = null;
+        }
+      }
+      let ttsSegmentAckTimers = new Map();
+
+      function sendPlaybackEnded(segmentId) {
+        try {
+          if (!ttsEnabled) return;
+          if (!ttsSocket || ttsSocket.readyState !== WebSocket.OPEN) return;
+          ttsSocket.send(
+            JSON.stringify({
+              type: "audio.playback.ended",
+              segment_id: segmentId ?? null,
+            }),
+          );
+        } catch (_) {}
+      }
+
+      function scheduleSegmentAck(segmentId) {
+        try {
+          if (!segmentId) return;
+          if (!ttsPlayer) return;
+          if (ttsSegmentAckTimers.has(segmentId)) return;
+
+          const endSec = ttsPlayer.getScheduledEndTimeSec();
+          const delayMs = Math.max(
+            0,
+            (endSec - ttsPlayer.ctx.currentTime) * 1000 + 30,
+          );
+          const timer = setTimeout(() => {
+            ttsSegmentAckTimers.delete(segmentId);
+            sendPlaybackEnded(segmentId);
+          }, delayMs);
+          ttsSegmentAckTimers.set(segmentId, timer);
+        } catch (_) {}
+      }
+
+      function ttsAppendText(text) {
         if (!ttsEnabled) return;
         if (!ttsSocket || ttsSocket.readyState !== WebSocket.OPEN) return;
-        ttsSocket.send(JSON.stringify({ type: "audio.playback.ended", segment_id: segmentId ?? null }));
-      } catch (_) {}
-    }
+        if (!text || !text.trim()) return;
+        ttsSocket.send(
+          JSON.stringify({ type: "input_text_buffer.append", text }),
+        );
+      }
 
-    function scheduleSegmentAck(segmentId) {
-      try {
-        if (!segmentId) return;
-        if (!ttsPlayer) return;
-        if (ttsSegmentAckTimers.has(segmentId)) return;
-
-        const endSec = ttsPlayer.getScheduledEndTimeSec();
-        const delayMs = Math.max(0, (endSec - ttsPlayer.ctx.currentTime) * 1000 + 30);
-        const timer = setTimeout(() => {
-          ttsSegmentAckTimers.delete(segmentId);
-          sendPlaybackEnded(segmentId);
-        }, delayMs);
-        ttsSegmentAckTimers.set(segmentId, timer);
-      } catch (_) {}
-    }
-
-    function ttsAppendText(text) {
-      if (!ttsEnabled) return;
-      if (!ttsSocket || ttsSocket.readyState !== WebSocket.OPEN) return;
-      if (!text || !text.trim()) return;
-      ttsSocket.send(JSON.stringify({ type: "input_text_buffer.append", text }));
-    }
-
-    function ttsCommit() {
-      if (!ttsEnabled) return;
-      if (!ttsSocket || ttsSocket.readyState !== WebSocket.OPEN) return;
-      ttsSocket.send(JSON.stringify({ type: "input_text_buffer.commit" }));
-    }
-
-    function ttsFlushNow() {
-      if (!ttsEnabled) return;
-      if (!ttsTextBuf || !ttsTextBuf.trim()) return;
-      ttsAppendText(ttsTextBuf);
-      ttsCommit();
-      ttsTextBuf = '';
-    }
-
-    // ======== 关键修复 3：别用 180ms/10字，把“段”搞得太碎 ========
-    function startTtsFlushTimer() {
-      if (ttsFlushTimer) return;
-      ttsFlushTimer = setInterval(() => {
+      function ttsCommit() {
         if (!ttsEnabled) return;
-        if (!ttsTextBuf) return;
-        if (ttsTextBuf.length < TTS_COMMIT_MIN_CHARS) return;
-        ttsFlushNow();
-      }, 450); // 建议 450ms（与你后端 FLUSH_INTERVAL_MS 默认一致）
-    }
-
-    function ttsFeedDelta(delta) {
-      if (!ttsEnabled) return;
-      if (!delta) return;
-
-      ttsTextBuf += delta;
-
-      const shouldFlush =
-        /[。！？!?；;，,\n]/.test(ttsTextBuf) || ttsTextBuf.length >= TTS_COMMIT_MIN_CHARS;
-
-      if (shouldFlush) {
-        ttsFlushNow();
+        if (!ttsSocket || ttsSocket.readyState !== WebSocket.OPEN) return;
+        ttsSocket.send(JSON.stringify({ type: "input_text_buffer.commit" }));
       }
-    }
 
-    // =========================
-    // Live2D 初始化
-    // =========================
-    let oml2d = null;
-    try {
-      if (window.OML2D) {
-        const LIVE2D_ASSET_BASE = window.__LIVE2D_ASSET_BASE__ || location.origin;
-        oml2d = OML2D.loadOml2d({
-          importType: 'cubism5',
-          models: [
-            {
-              path: `${LIVE2D_ASSET_BASE}/mao_pro_en/runtime/mao_pro.model3.json`,
-              scale: 0.07,
-              position: [0, 0],
-              showHitAreaFrames: false,
-              motionPreloadStrategy: 'ALL'
-            }
-          ],
-          tips: { welcomeTips: { duration: 0, priority: 0 }, idleTips: { duration: 0, priority: 0 } }
+      function ttsFlushNow() {
+        if (!ttsEnabled) return;
+        if (!ttsTextBuf || !ttsTextBuf.trim()) return;
+        ttsAppendText(ttsTextBuf);
+        ttsCommit();
+        ttsTextBuf = "";
+      }
+
+      // ======== 关键修复 3：别用 180ms/10字，把“段”搞得太碎 ========
+      function startTtsFlushTimer() {
+        if (ttsFlushTimer) return;
+        ttsFlushTimer = setInterval(() => {
+          if (!ttsEnabled) return;
+          if (!ttsTextBuf) return;
+          if (ttsTextBuf.length < TTS_COMMIT_MIN_CHARS) return;
+          ttsFlushNow();
+        }, 450); // 建议 450ms（与你后端 FLUSH_INTERVAL_MS 默认一致）
+      }
+
+      function ttsFeedDelta(delta) {
+        if (!ttsEnabled) return;
+        if (!delta) return;
+
+        ttsTextBuf += delta;
+
+        const shouldFlush =
+          /[。！？!?；;，,\n]/.test(ttsTextBuf) ||
+          ttsTextBuf.length >= TTS_COMMIT_MIN_CHARS;
+
+        if (shouldFlush) {
+          ttsFlushNow();
+        }
+      }
+
+      // =========================
+      // Live2D 初始化
+      // =========================
+      let oml2d = null;
+      try {
+        if (window.OML2D) {
+          const LIVE2D_ASSET_BASE =
+            window.__LIVE2D_ASSET_BASE__ || location.origin;
+          oml2d = OML2D.loadOml2d({
+            importType: "cubism5",
+            models: [
+              {
+                path: `${LIVE2D_ASSET_BASE}/mao_pro_en/runtime/mao_pro.model3.json`,
+                scale: 0.07,
+                position: [0, 0],
+                showHitAreaFrames: false,
+                motionPreloadStrategy: "ALL",
+              },
+            ],
+            tips: {
+              welcomeTips: { duration: 0, priority: 0 },
+              idleTips: { duration: 0, priority: 0 },
+            },
+          });
+        }
+      } catch (e) {
+        console.warn("Live2D 初始化失败（可忽略）:", e);
+      }
+      function goBack() {
+        const params = new URLSearchParams(location.search || "");
+        const live2dPort = params.get("live2dPort");
+        window.location.href = live2dPort
+          ? `mao_demo.html?live2dPort=${encodeURIComponent(live2dPort)}`
+          : "mao_demo.html";
+      }
+      (function bindBackClick() {
+        const container = document.getElementById("oml2d-container");
+        if (container) container.addEventListener("click", goBack);
+      })();
+
+      function openAudioScoringModal() {
+        const modal = document.getElementById("audioScoringModal");
+        if (modal) modal.classList.add("active");
+      }
+      function closeAudioScoringModal() {
+        const modal = document.getElementById("audioScoringModal");
+        if (modal) modal.classList.remove("active");
+        stopEmotionCapture();
+      }
+
+      // =========================
+      // DOM
+      // =========================
+      let isRecording = false;
+      let mediaRecorder = null;
+      let micStream = null;
+      let micInitPromise = null;
+      let asrChunks = [];
+      let lastRecordingWavBase64 = "";
+      let scoreVoiceTypeChosen = "女高音 Soprano";
+      let scoreRecorder = null;
+      let isScoreRecording = false;
+      let scoreChunks = [];
+      let lastScoreRecordingBase64 = "";
+      let lastScoreRecordingFormat = "mp3";
+      let emotionStream = null;
+      let emotionActive = false;
+      let emotionRaf = 0;
+      let emotionDetecting = false;
+      let emotionModelLoadPromise = null;
+      let emotionTotals = null;
+      let emotionFrameCount = 0;
+      let emotionCharts = {};
+      let emotionUiCurrent = {
+        liveId: "emotionLive",
+        videoId: "emotionVideo",
+        statusId: "emotionStatus",
+      };
+
+      const voiceButton = document.getElementById("voiceButton");
+      const voiceStatus = document.getElementById("voiceStatus");
+      const messageInput = document.getElementById("messageInput");
+      const chatMessages = document.getElementById("chatMessages");
+      const ttsToggleBtn = document.getElementById("ttsToggle");
+
+      const TECH_NAME_MAP = {
+        vibrato: "颤音技巧",
+        throat: "喉位控制",
+        position: "发声位置",
+        open: "声道开放度",
+        clean: "音色纯净度",
+        resonate: "共鸣质量",
+        unify: "声音统一性",
+        falsetto: "假声技巧",
+        chest: "胸声/真声",
+        nasal: "鼻腔共鸣",
+      };
+
+      // =========================
+      // 聊天上下文
+      // =========================
+      const SYSTEM_PROMPT =
+        "你是“滴哇老师”，一位专业、耐心、严格但友好的美声声乐老师。你擅长给出可执行的练习建议（呼吸、支点、共鸣、咬字、连贯、元音统一、音区过渡等），回答要结构清晰、步骤明确、避免空话。在输出时，应当保持一位老师的严谨，避免用太多的语气词，每次回答控制在100个汉字之内";
+      const chatHistory = [
+        { role: "system", content: SYSTEM_PROMPT },
+        {
+          role: "assistant",
+          content:
+            "你好！我是你的声乐老师滴哇，很高兴为你服务！有什么声乐方面的问题都可以问我哦~",
+        },
+      ];
+
+      const SCORE_RULE_PREFIX = "评分规则：1分最好，5分最差。\n";
+      function withScoreRule(text) {
+        const t = text == null ? "" : String(text);
+        if (!t.trim()) return t;
+        return t.startsWith(SCORE_RULE_PREFIX) ? t : SCORE_RULE_PREFIX + t;
+      }
+
+      function arrayBufferToBase64(buffer) {
+        const uint8Array = new Uint8Array(buffer);
+        let binary = "";
+        for (let i = 0; i < uint8Array.length; i++)
+          binary += String.fromCharCode(uint8Array[i]);
+        return btoa(binary);
+      }
+
+      function promiseWithTimeout(promise, ms, message) {
+        let timer = 0;
+        const timeoutPromise = new Promise((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error(message || "操作超时")),
+            ms,
+          );
         });
-      }
-    } catch (e) {
-      console.warn('Live2D 初始化失败（可忽略）:', e);
-    }
-    function goBack() {
-      const params = new URLSearchParams(location.search || '');
-      const live2dPort = params.get('live2dPort');
-      window.location.href = live2dPort ? `mao_demo.html?live2dPort=${encodeURIComponent(live2dPort)}` : 'mao_demo.html';
-    }
-    (function bindBackClick() {
-      const container = document.getElementById('oml2d-container');
-      if (container) container.addEventListener('click', goBack);
-    })();
-
-    function openAudioScoringModal() {
-      const modal = document.getElementById('audioScoringModal');
-      if (modal) modal.classList.add('active');
-    }
-    function closeAudioScoringModal() {
-      const modal = document.getElementById('audioScoringModal');
-      if (modal) modal.classList.remove('active');
-      stopEmotionCapture();
-    }
-
-    // =========================
-    // DOM
-    // =========================
-    let isRecording = false;
-    let mediaRecorder = null;
-    let micStream = null;
-    let micInitPromise = null;
-    let asrChunks = [];
-    let lastRecordingWavBase64 = '';
-    let scoreVoiceTypeChosen = '女高音 Soprano';
-    let scoreRecorder = null;
-    let isScoreRecording = false;
-    let scoreChunks = [];
-    let lastScoreRecordingBase64 = '';
-    let lastScoreRecordingFormat = 'mp3';
-    let emotionStream = null;
-    let emotionActive = false;
-    let emotionRaf = 0;
-    let emotionDetecting = false;
-    let emotionModelLoadPromise = null;
-    let emotionTotals = null;
-    let emotionFrameCount = 0;
-    let emotionCharts = {};
-    let emotionUiCurrent = { liveId: 'emotionLive', videoId: 'emotionVideo', statusId: 'emotionStatus' };
-
-    const voiceButton = document.getElementById('voiceButton');
-    const voiceStatus = document.getElementById('voiceStatus');
-    const messageInput = document.getElementById('messageInput');
-    const chatMessages = document.getElementById('chatMessages');
-    const ttsToggleBtn = document.getElementById('ttsToggle');
-
-    const TECH_NAME_MAP = {
-      "vibrato": "颤音技巧",
-      "throat": "喉位控制",
-      "position": "发声位置",
-      "open": "声道开放度",
-      "clean": "音色纯净度",
-      "resonate": "共鸣质量",
-      "unify": "声音统一性",
-      "falsetto": "假声技巧",
-      "chest": "胸声/真声",
-      "nasal": "鼻腔共鸣"
-    };
-
-    // =========================
-    // 聊天上下文
-    // =========================
-    const SYSTEM_PROMPT = "你是“滴哇老师”，一位专业、耐心、严格但友好的美声声乐老师。你擅长给出可执行的练习建议（呼吸、支点、共鸣、咬字、连贯、元音统一、音区过渡等），回答要结构清晰、步骤明确、避免空话。在输出时，应当保持一位老师的严谨，避免用太多的语气词，每次回答控制在100个汉字之内";
-    const chatHistory = [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "assistant", content: "你好！我是你的声乐老师滴哇，很高兴为你服务！有什么声乐方面的问题都可以问我哦~" }
-    ];
-
-    function arrayBufferToBase64(buffer) {
-      const uint8Array = new Uint8Array(buffer);
-      let binary = '';
-      for (let i = 0; i < uint8Array.length; i++) binary += String.fromCharCode(uint8Array[i]);
-      return btoa(binary);
-    }
-
-    function promiseWithTimeout(promise, ms, message) {
-      let timer = 0;
-      const timeoutPromise = new Promise((_, reject) => {
-        timer = setTimeout(() => reject(new Error(message || '操作超时')), ms);
-      });
-      return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
-    }
-
-    function resetEmotionAggregation() {
-      emotionTotals = {
-        neutral: 0,
-        happy: 0,
-        sad: 0,
-        angry: 0,
-        fearful: 0,
-        disgusted: 0,
-        surprised: 0
-      };
-      emotionFrameCount = 0;
-    }
-
-    function getEmotionSummary() {
-      if (!emotionTotals || !emotionFrameCount) return null;
-      const keys = Object.keys(emotionTotals);
-      const values = keys.map(k => emotionTotals[k] / emotionFrameCount);
-      const sum = values.reduce((a, b) => a + b, 0);
-      if (!sum) return null;
-      const normalized = values.map(v => v / sum);
-      return { keys, values: normalized, frameCount: emotionFrameCount };
-    }
-
-    function renderEmotionRainbow(containerId) {
-      const container = document.getElementById(containerId);
-      if (!container) return;
-
-      const summary = getEmotionSummary();
-      if (!summary) {
-        container.style.display = 'none';
-        return;
+        return Promise.race([promise, timeoutPromise]).finally(() =>
+          clearTimeout(timer),
+        );
       }
 
-      const meta = {
-        happy: { emoji: '😊', color: '#FFD93D', label: '开心' },
-        neutral: { emoji: '😐', color: '#A0A0A0', label: '平静' },
-        surprised: { emoji: '😮', color: '#FF9F1C', label: '惊讶' },
-        sad: { emoji: '😢', color: '#4CC9F0', label: '悲伤' },
-        angry: { emoji: '😡', color: '#FF5F5F', label: '愤怒' },
-        fearful: { emoji: '😨', color: '#9D4EDD', label: '恐惧' },
-        disgusted: { emoji: '🤢', color: '#6BCB77', label: '厌恶' }
-      };
+      function resetEmotionAggregation() {
+        emotionTotals = {
+          neutral: 0,
+          happy: 0,
+          sad: 0,
+          angry: 0,
+          fearful: 0,
+          disgusted: 0,
+          surprised: 0,
+        };
+        emotionFrameCount = 0;
+      }
 
-      const order = ['happy', 'neutral', 'surprised', 'sad', 'angry', 'fearful', 'disgusted'];
-      const map = {};
-      for (let i = 0; i < summary.keys.length; i++) map[summary.keys[i]] = summary.values[i];
-      const valuesOrdered = order.map(k => (typeof map[k] === 'number' ? map[k] : 0));
-      const maxIdx = valuesOrdered.reduce((m, v, i, arr) => (v > arr[m] ? i : m), 0);
+      function getEmotionSummary() {
+        if (!emotionTotals || !emotionFrameCount) return null;
+        const keys = Object.keys(emotionTotals);
+        const values = keys.map((k) => emotionTotals[k] / emotionFrameCount);
+        const sum = values.reduce((a, b) => a + b, 0);
+        if (!sum) return null;
+        const normalized = values.map((v) => v / sum);
+        return { keys, values: normalized, frameCount: emotionFrameCount };
+      }
 
-      container.innerHTML = '';
-      order.forEach((k, idx) => {
-        const it = meta[k];
-        const v = valuesOrdered[idx];
-        const item = document.createElement('div');
-        item.className = 'kid-emotion-item' + (idx === maxIdx ? ' active' : '');
-        item.title = `${it.label}: ${Math.round(v * 1000) / 10}%`;
-        item.innerHTML = `
+      function formatEmotionForPrompt(threshold = 0.2, minFrames = 10) {
+        const summary = getEmotionSummary();
+        if (!summary) return "";
+        if ((summary.frameCount || 0) < minFrames) return "";
+        const zh = {
+          neutral: "平静",
+          happy: "开心",
+          sad: "悲伤",
+          angry: "愤怒",
+          fearful: "恐惧",
+          disgusted: "厌恶",
+          surprised: "惊讶",
+        };
+
+        const pairs = summary.keys
+          .map((k, i) => ({ k, v: summary.values[i] }))
+          .filter(
+            (p) =>
+              typeof p.v === "number" &&
+              Number.isFinite(p.v) &&
+              p.v >= threshold,
+          )
+          .sort((a, b) => b.v - a.v);
+
+        if (!pairs.length) return "";
+        const parts = pairs.map(
+          (p) => `${zh[p.k] || p.k}${Math.round(p.v * 100)}%`,
+        );
+        return `用户当前情感是：${parts.join("，")}`;
+      }
+
+      function renderEmotionRainbow(containerId) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+
+        const summary = getEmotionSummary();
+        if (!summary) {
+          container.style.display = "none";
+          return;
+        }
+
+        const meta = {
+          happy: { emoji: "😊", color: "#FFD93D", label: "开心" },
+          neutral: { emoji: "😐", color: "#A0A0A0", label: "平静" },
+          surprised: { emoji: "😮", color: "#FF9F1C", label: "惊讶" },
+          sad: { emoji: "😢", color: "#4CC9F0", label: "悲伤" },
+          angry: { emoji: "😡", color: "#FF5F5F", label: "愤怒" },
+          fearful: { emoji: "😨", color: "#9D4EDD", label: "恐惧" },
+          disgusted: { emoji: "🤢", color: "#6BCB77", label: "厌恶" },
+        };
+
+        const order = [
+          "happy",
+          "neutral",
+          "surprised",
+          "sad",
+          "angry",
+          "fearful",
+          "disgusted",
+        ];
+        const map = {};
+        for (let i = 0; i < summary.keys.length; i++)
+          map[summary.keys[i]] = summary.values[i];
+        const valuesOrdered = order.map((k) =>
+          typeof map[k] === "number" ? map[k] : 0,
+        );
+        const maxIdx = valuesOrdered.reduce(
+          (m, v, i, arr) => (v > arr[m] ? i : m),
+          0,
+        );
+
+        container.innerHTML = "";
+        order.forEach((k, idx) => {
+          const it = meta[k];
+          const v = valuesOrdered[idx];
+          const item = document.createElement("div");
+          item.className =
+            "kid-emotion-item" + (idx === maxIdx ? " active" : "");
+          item.title = `${it.label}: ${Math.round(v * 1000) / 10}%`;
+          item.innerHTML = `
           <div class="kid-emotion-icon">${it.emoji}</div>
           <div class="kid-emotion-bar-bg">
             <div class="kid-emotion-bar-fill" style="background:${it.color};height:${Math.max(0, Math.min(100, v * 100))}%;"></div>
           </div>
         `;
-        container.appendChild(item);
-      });
+          container.appendChild(item);
+        });
 
-      container.style.display = 'flex';
-    }
+        container.style.display = "flex";
+      }
 
-    function renderKidTechniqueBlocks(scores, containerId) {
-      const container = document.getElementById(containerId);
-      if (!container) return;
+      function renderKidTechniqueBlocks(scores, containerId) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
 
-      const want = ['open', 'clean', 'resonate'];
-      const palette = { open: 'kid-blue', clean: 'kid-purple', resonate: 'kid-green' };
-      const icon = { open: '🌬️', clean: '✨', resonate: '📣' };
-      const title = { open: 'Open', clean: 'Clean', resonate: 'Resonant' };
+        const want = ["open", "clean", "resonate"];
+        const palette = {
+          open: "kid-blue",
+          clean: "kid-purple",
+          resonate: "kid-green",
+        };
+        const icon = { open: "🌬️", clean: "✨", resonate: "📣" };
+        const title = { open: "Open", clean: "Clean", resonate: "Resonant" };
 
-      const byKey = {};
-      (scores || []).forEach(s => { if (s && s.technique) byKey[s.technique] = s; });
+        const byKey = {};
+        (scores || []).forEach((s) => {
+          if (s && s.technique) byKey[s.technique] = s;
+        });
 
-      container.innerHTML = '';
-      want.forEach(k => {
-        const s = byKey[k];
-        const score = (s && typeof s.score === 'number') ? s.score : null;
-        const scoreText = (score == null) ? '-' : String(score);
-        const stars = (score == null) ? 0 : Math.max(1, Math.min(5, 6 - Math.round(score)));
-        const starText = (stars === 0) ? '' : ('⭐'.repeat(stars) + '☆'.repeat(5 - stars));
-        const block = document.createElement('div');
-        block.className = `kid-toy-block ${palette[k]}`;
-        block.innerHTML = `
+        container.innerHTML = "";
+        want.forEach((k) => {
+          const s = byKey[k];
+          const score = s && typeof s.score === "number" ? s.score : null;
+          const scoreText = score == null ? "-" : String(score);
+          const stars =
+            score == null ? 0 : Math.max(1, Math.min(5, 6 - Math.round(score)));
+          const starText =
+            stars === 0 ? "" : "⭐".repeat(stars) + "☆".repeat(5 - stars);
+          const block = document.createElement("div");
+          block.className = `kid-toy-block ${palette[k]}`;
+          block.innerHTML = `
           <div class="kid-block-icon">${icon[k]}</div>
           <div class="kid-block-title">${title[k]}</div>
           <div class="kid-block-value">${scoreText}</div>
           <div class="kid-block-sub">${starText}</div>
         `;
-        container.appendChild(block);
-      });
-    }
+          container.appendChild(block);
+        });
+      }
 
-    function ensureEmotionModelsLoaded() {
-      if (emotionModelLoadPromise) return emotionModelLoadPromise;
-      emotionModelLoadPromise = (async () => {
-        const base = window.__LIVE2D_ASSET_BASE__ || location.origin;
-        const localModelUrl = `${String(base).replace(/\/$/, '')}/face-api-models`;
-        const remoteModelUrl = 'https://justadudewhohacks.github.io/face-api.js/models';
+      function ensureEmotionModelsLoaded() {
+        if (emotionModelLoadPromise) return emotionModelLoadPromise;
+        emotionModelLoadPromise = (async () => {
+          const base = window.__LIVE2D_ASSET_BASE__ || location.origin;
+          const localModelUrl = `${String(base).replace(/\/$/, "")}/face-api-models`;
+          const remoteModelUrl =
+            "https://justadudewhohacks.github.io/face-api.js/models";
 
-        const loadAll = async (url) => {
-          await faceapi.nets.tinyFaceDetector.loadFromUri(url);
-          await faceapi.nets.faceLandmark68Net.loadFromUri(url);
-          await faceapi.nets.faceExpressionNet.loadFromUri(url);
-        };
+          const loadAll = async (url) => {
+            await faceapi.nets.tinyFaceDetector.loadFromUri(url);
+            await faceapi.nets.faceLandmark68Net.loadFromUri(url);
+            await faceapi.nets.faceExpressionNet.loadFromUri(url);
+          };
 
-        try {
-          await loadAll(localModelUrl);
-        } catch (eLocal) {
           try {
-            await loadAll(remoteModelUrl);
-          } catch (eRemote) {
-            const localMsg = eLocal?.message || String(eLocal);
-            const remoteMsg = eRemote?.message || String(eRemote);
-            throw new Error(`情感模型加载失败（本地：${localMsg}；网络：${remoteMsg}）`);
+            await loadAll(localModelUrl);
+          } catch (eLocal) {
+            try {
+              await loadAll(remoteModelUrl);
+            } catch (eRemote) {
+              const localMsg = eLocal?.message || String(eLocal);
+              const remoteMsg = eRemote?.message || String(eRemote);
+              throw new Error(
+                `情感模型加载失败（本地：${localMsg}；网络：${remoteMsg}）`,
+              );
+            }
           }
-        }
-      })();
-      return emotionModelLoadPromise;
-    }
+        })();
+        return emotionModelLoadPromise;
+      }
 
-    function setEmotionStatus(text) {
-      const el = document.getElementById(emotionUiCurrent.statusId);
-      if (el) el.textContent = text;
-    }
+      function setEmotionStatus(text) {
+        const el = document.getElementById(emotionUiCurrent.statusId);
+        if (el) el.textContent = text;
+      }
 
-    async function startEmotionCapture(ui) {
-      if (ui && ui.liveId && ui.videoId && ui.statusId) emotionUiCurrent = ui;
-      const live = document.getElementById(emotionUiCurrent.liveId);
-      const video = document.getElementById(emotionUiCurrent.videoId);
-      if (!live || !video) return;
+      async function startEmotionCapture(ui) {
+        if (ui && ui.liveId && ui.videoId && ui.statusId) emotionUiCurrent = ui;
+        const live = document.getElementById(emotionUiCurrent.liveId);
+        const video = document.getElementById(emotionUiCurrent.videoId);
+        if (!live || !video) return;
 
-      live.style.display = 'block';
-      resetEmotionAggregation();
+        live.style.display = "block";
+        resetEmotionAggregation();
 
-      try {
-        if (!navigator.mediaDevices?.getUserMedia) throw new Error('当前浏览器不支持摄像头');
-        setEmotionStatus('正在请求摄像头权限...');
-        const stream = await promiseWithTimeout(navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user' },
-          audio: false
-        }), 10000, '摄像头权限请求超时（请检查浏览器站点权限/系统隐私设置）');
-
-        emotionStream = stream;
-        video.srcObject = stream;
-        try { await promiseWithTimeout(video.play(), 4000, '摄像头预览启动超时'); } catch (_) {}
-
-        try { live.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_) {}
-
-        if (!window.faceapi) {
-          emotionActive = false;
-          emotionDetecting = false;
-          setEmotionStatus('摄像头已开启（face-api 未加载，情感分析不可用）');
-          return;
-        }
-
-        setEmotionStatus('正在加载表情模型...');
         try {
-          await ensureEmotionModelsLoaded();
-          emotionActive = true;
-          emotionDetecting = false;
-          setEmotionStatus('情感分析中...');
-          scheduleEmotionLoop();
+          if (!navigator.mediaDevices?.getUserMedia)
+            throw new Error("当前浏览器不支持摄像头");
+          setEmotionStatus("正在请求摄像头权限...");
+          const stream = await promiseWithTimeout(
+            navigator.mediaDevices.getUserMedia({
+              video: { facingMode: "user" },
+              audio: false,
+            }),
+            10000,
+            "摄像头权限请求超时（请检查浏览器站点权限/系统隐私设置）",
+          );
+
+          emotionStream = stream;
+          video.srcObject = stream;
+          try {
+            await promiseWithTimeout(video.play(), 4000, "摄像头预览启动超时");
+          } catch (_) {}
+
+          try {
+            live.scrollIntoView({ block: "center", behavior: "smooth" });
+          } catch (_) {}
+
+          if (!window.faceapi) {
+            emotionActive = false;
+            emotionDetecting = false;
+            setEmotionStatus("摄像头已开启（face-api 未加载，情感分析不可用）");
+            return;
+          }
+
+          setEmotionStatus("正在加载表情模型...");
+          try {
+            await ensureEmotionModelsLoaded();
+            emotionActive = true;
+            emotionDetecting = false;
+            setEmotionStatus("情感分析中...");
+            scheduleEmotionLoop();
+          } catch (e) {
+            emotionActive = false;
+            emotionDetecting = false;
+            setEmotionStatus(
+              "摄像头已开启（情感模型加载失败：" +
+                (e?.message || String(e)) +
+                "）",
+            );
+          }
         } catch (e) {
           emotionActive = false;
           emotionDetecting = false;
-          setEmotionStatus('摄像头已开启（情感模型加载失败：' + (e?.message || String(e)) + '）');
+          if (emotionRaf) {
+            cancelAnimationFrame(emotionRaf);
+            emotionRaf = 0;
+          }
+
+          const video = document.getElementById(emotionUiCurrent.videoId);
+          if (video) {
+            try {
+              video.pause();
+            } catch (_) {}
+            try {
+              video.srcObject = null;
+            } catch (_) {}
+          }
+
+          if (emotionStream) {
+            try {
+              emotionStream.getTracks().forEach((t) => t.stop());
+            } catch (_) {}
+            emotionStream = null;
+          }
+
+          setEmotionStatus("摄像头/模型加载失败：" + (e?.message || String(e)));
         }
-      } catch (e) {
+      }
+
+      function stopEmotionCapture() {
         emotionActive = false;
         emotionDetecting = false;
         if (emotionRaf) {
@@ -1272,1074 +1667,1221 @@
 
         const video = document.getElementById(emotionUiCurrent.videoId);
         if (video) {
-          try { video.pause(); } catch (_) {}
-          try { video.srcObject = null; } catch (_) {}
+          try {
+            video.pause();
+          } catch (_) {}
+          try {
+            video.srcObject = null;
+          } catch (_) {}
         }
 
         if (emotionStream) {
-          try { emotionStream.getTracks().forEach(t => t.stop()); } catch (_) {}
+          try {
+            emotionStream.getTracks().forEach((t) => t.stop());
+          } catch (_) {}
           emotionStream = null;
         }
 
-        setEmotionStatus('摄像头/模型加载失败：' + (e?.message || String(e)));
-      }
-    }
-
-    function stopEmotionCapture() {
-      emotionActive = false;
-      emotionDetecting = false;
-      if (emotionRaf) {
-        cancelAnimationFrame(emotionRaf);
-        emotionRaf = 0;
+        const live = document.getElementById(emotionUiCurrent.liveId);
+        if (live) live.style.display = "none";
+        setEmotionStatus("未启动");
       }
 
-      const video = document.getElementById(emotionUiCurrent.videoId);
-      if (video) {
-        try { video.pause(); } catch (_) {}
-        try { video.srcObject = null; } catch (_) {}
-      }
+      async function runEmotionStep() {
+        if (!emotionActive) return;
+        const video = document.getElementById(emotionUiCurrent.videoId);
+        if (!video) return;
 
-      if (emotionStream) {
-        try { emotionStream.getTracks().forEach(t => t.stop()); } catch (_) {}
-        emotionStream = null;
-      }
+        if (video.readyState < 2) return;
+        if (emotionDetecting) return;
+        emotionDetecting = true;
 
-      const live = document.getElementById(emotionUiCurrent.liveId);
-      if (live) live.style.display = 'none';
-      setEmotionStatus('未启动');
-    }
+        try {
+          const det = await faceapi
+            .detectSingleFace(
+              video,
+              new faceapi.TinyFaceDetectorOptions({
+                inputSize: 224,
+                scoreThreshold: 0.5,
+              }),
+            )
+            .withFaceLandmarks()
+            .withFaceExpressions();
 
-    async function runEmotionStep() {
-      if (!emotionActive) return;
-      const video = document.getElementById(emotionUiCurrent.videoId);
-      if (!video) return;
-
-      if (video.readyState < 2) return;
-      if (emotionDetecting) return;
-      emotionDetecting = true;
-
-      try {
-        const det = await faceapi
-          .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 }))
-          .withFaceLandmarks()
-          .withFaceExpressions();
-
-        if (det?.expressions && emotionTotals) {
-          const ex = det.expressions;
-          for (const k of Object.keys(emotionTotals)) {
-            const v = ex[k];
-            if (typeof v === 'number' && Number.isFinite(v)) emotionTotals[k] += v;
+          if (det?.expressions && emotionTotals) {
+            const ex = det.expressions;
+            for (const k of Object.keys(emotionTotals)) {
+              const v = ex[k];
+              if (typeof v === "number" && Number.isFinite(v))
+                emotionTotals[k] += v;
+            }
+            emotionFrameCount += 1;
+            if (emotionFrameCount % 15 === 0)
+              setEmotionStatus(`情感分析中... 已采样 ${emotionFrameCount} 帧`);
           }
-          emotionFrameCount += 1;
-          if (emotionFrameCount % 15 === 0) setEmotionStatus(`情感分析中... 已采样 ${emotionFrameCount} 帧`);
+        } catch (e) {
+          setEmotionStatus("情感分析出错：" + (e?.message || String(e)));
+        } finally {
+          emotionDetecting = false;
         }
-      } catch (e) {
-        setEmotionStatus('情感分析出错：' + (e?.message || String(e)));
-      } finally {
-        emotionDetecting = false;
       }
-    }
 
-    function scheduleEmotionLoop() {
-      if (!emotionActive) return;
-      emotionRaf = requestAnimationFrame(async () => {
-        await runEmotionStep();
-        scheduleEmotionLoop();
-      });
-    }
+      function scheduleEmotionLoop() {
+        if (!emotionActive) return;
+        emotionRaf = requestAnimationFrame(async () => {
+          await runEmotionStep();
+          scheduleEmotionLoop();
+        });
+      }
 
-    function renderEmotionPieChart(containerId = 'emotionPieContainer', canvasId = 'emotionPieChart') {
-      const container = document.getElementById(containerId);
-      const canvas = document.getElementById(canvasId);
-      if (!container || !canvas) return;
+      function renderEmotionPieChart(
+        containerId = "emotionPieContainer",
+        canvasId = "emotionPieChart",
+      ) {
+        const container = document.getElementById(containerId);
+        const canvas = document.getElementById(canvasId);
+        if (!container || !canvas) return;
 
-      const summary = getEmotionSummary();
-      if (!summary || !window.Chart) {
+        const summary = getEmotionSummary();
+        if (!summary || !window.Chart) {
+          if (emotionCharts[canvasId]) {
+            try {
+              emotionCharts[canvasId].destroy();
+            } catch (_) {}
+            delete emotionCharts[canvasId];
+          }
+          container.style.display = "none";
+          return;
+        }
+
+        const zh = {
+          neutral: "平静",
+          happy: "开心",
+          sad: "悲伤",
+          angry: "愤怒",
+          fearful: "恐惧",
+          disgusted: "厌恶",
+          surprised: "惊讶",
+        };
+
+        const labels = summary.keys.map((k) => zh[k] || k);
+        const data = summary.values.map((v) => Math.round(v * 1000) / 10);
+
+        container.style.display = "block";
+
         if (emotionCharts[canvasId]) {
-          try { emotionCharts[canvasId].destroy(); } catch (_) {}
+          try {
+            emotionCharts[canvasId].destroy();
+          } catch (_) {}
           delete emotionCharts[canvasId];
         }
-        container.style.display = 'none';
-        return;
+
+        const ctx = canvas.getContext("2d");
+        emotionCharts[canvasId] = new Chart(ctx, {
+          type: "pie",
+          data: {
+            labels,
+            datasets: [
+              {
+                data,
+                backgroundColor: [
+                  "rgba(108, 117, 125, 0.85)",
+                  "rgba(255, 193, 7, 0.85)",
+                  "rgba(52, 144, 220, 0.85)",
+                  "rgba(220, 53, 69, 0.85)",
+                  "rgba(111, 66, 193, 0.85)",
+                  "rgba(40, 167, 69, 0.85)",
+                  "rgba(253, 126, 20, 0.85)",
+                ],
+                borderColor: [
+                  "rgba(108, 117, 125, 1)",
+                  "rgba(255, 193, 7, 1)",
+                  "rgba(52, 144, 220, 1)",
+                  "rgba(220, 53, 69, 1)",
+                  "rgba(111, 66, 193, 1)",
+                  "rgba(40, 167, 69, 1)",
+                  "rgba(253, 126, 20, 1)",
+                ],
+                borderWidth: 1,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { position: "right" },
+              tooltip: {
+                callbacks: {
+                  label: (ctx) => `${ctx.label}: ${ctx.raw}%`,
+                },
+              },
+            },
+          },
+        });
       }
 
-      const zh = {
-        neutral: '平静',
-        happy: '开心',
-        sad: '悲伤',
-        angry: '愤怒',
-        fearful: '恐惧',
-        disgusted: '厌恶',
-        surprised: '惊讶'
-      };
-
-      const labels = summary.keys.map(k => zh[k] || k);
-      const data = summary.values.map(v => Math.round(v * 1000) / 10);
-
-      container.style.display = 'block';
-
-      if (emotionCharts[canvasId]) {
-        try { emotionCharts[canvasId].destroy(); } catch (_) {}
-        delete emotionCharts[canvasId];
+      function writeAscii(view, offset, str) {
+        for (let i = 0; i < str.length; i++)
+          view.setUint8(offset + i, str.charCodeAt(i));
       }
 
-      const ctx = canvas.getContext('2d');
-      emotionCharts[canvasId] = new Chart(ctx, {
-        type: 'pie',
-        data: {
-          labels,
-          datasets: [{
-            data,
-            backgroundColor: [
-              'rgba(108, 117, 125, 0.85)',
-              'rgba(255, 193, 7, 0.85)',
-              'rgba(52, 144, 220, 0.85)',
-              'rgba(220, 53, 69, 0.85)',
-              'rgba(111, 66, 193, 0.85)',
-              'rgba(40, 167, 69, 0.85)',
-              'rgba(253, 126, 20, 0.85)'
-            ],
-            borderColor: [
-              'rgba(108, 117, 125, 1)',
-              'rgba(255, 193, 7, 1)',
-              'rgba(52, 144, 220, 1)',
-              'rgba(220, 53, 69, 1)',
-              'rgba(111, 66, 193, 1)',
-              'rgba(40, 167, 69, 1)',
-              'rgba(253, 126, 20, 1)'
-            ],
-            borderWidth: 1
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { position: 'right' },
-            tooltip: {
-              callbacks: {
-                label: (ctx) => `${ctx.label}: ${ctx.raw}%`
-              }
+      function pcm16ToWavArrayBuffer(
+        pcm16ArrayBuffer,
+        sampleRate = 16000,
+        numChannels = 1,
+      ) {
+        const pcmBytes = new Uint8Array(pcm16ArrayBuffer);
+        const dataLen = pcmBytes.byteLength;
+        const buffer = new ArrayBuffer(44 + dataLen);
+        const view = new DataView(buffer);
+
+        writeAscii(view, 0, "RIFF");
+        view.setUint32(4, 36 + dataLen, true);
+        writeAscii(view, 8, "WAVE");
+        writeAscii(view, 12, "fmt ");
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);
+        view.setUint16(22, numChannels, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * numChannels * 2, true);
+        view.setUint16(32, numChannels * 2, true);
+        view.setUint16(34, 16, true);
+        writeAscii(view, 36, "data");
+        view.setUint32(40, dataLen, true);
+
+        new Uint8Array(buffer, 44).set(pcmBytes);
+        return buffer;
+      }
+
+      async function blobToPcm16kInt16ArrayBuffer(audioBlob) {
+        const arrayBuffer = await audioBlob.arrayBuffer();
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioCtx();
+        let decoded = null;
+        try {
+          decoded = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+        } catch (_) {
+          await new Promise((r) => setTimeout(r, 50));
+          decoded = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+        } finally {
+          try {
+            await audioCtx.close();
+          } catch (_) {}
+        }
+
+        const targetSampleRate = 16000;
+        const length = Math.round(decoded.duration * targetSampleRate);
+        const offline = new OfflineAudioContext(1, length, targetSampleRate);
+
+        const source = offline.createBufferSource();
+        source.buffer = decoded;
+        source.connect(offline.destination);
+        source.start(0);
+
+        const rendered = await offline.startRendering();
+
+        const float32 = rendered.getChannelData(0);
+        const int16 = new Int16Array(float32.length);
+        for (let i = 0; i < float32.length; i++) {
+          const s = Math.max(-1, Math.min(1, float32[i]));
+          int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+        }
+        return int16.buffer;
+      }
+
+      async function blobToPcmInt16ArrayBuffer(audioBlob, targetSampleRate) {
+        const arrayBuffer = await audioBlob.arrayBuffer();
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioCtx();
+        let decoded = null;
+        try {
+          decoded = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+        } catch (_) {
+          await new Promise((r) => setTimeout(r, 50));
+          decoded = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+        } finally {
+          try {
+            await audioCtx.close();
+          } catch (_) {}
+        }
+
+        const length = Math.round(decoded.duration * targetSampleRate);
+        const offline = new OfflineAudioContext(1, length, targetSampleRate);
+
+        const source = offline.createBufferSource();
+        source.buffer = decoded;
+        source.connect(offline.destination);
+        source.start(0);
+
+        const rendered = await offline.startRendering();
+
+        const float32 = rendered.getChannelData(0);
+        const int16 = new Int16Array(float32.length);
+        for (let i = 0; i < float32.length; i++) {
+          const s = Math.max(-1, Math.min(1, float32[i]));
+          int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+        }
+        return int16.buffer;
+      }
+
+      async function initVoiceRecognition() {
+        if (micStream) return true;
+        if (micInitPromise) return micInitPromise;
+        micInitPromise = (async () => {
+          try {
+            if (
+              !navigator.mediaDevices ||
+              !navigator.mediaDevices.getUserMedia
+            ) {
+              voiceStatus.textContent = "浏览器不支持录音功能";
+              voiceButton.disabled = true;
+              return false;
             }
+
+            const stream = await promiseWithTimeout(
+              navigator.mediaDevices.getUserMedia({
+                audio: {
+                  channelCount: 1,
+                  echoCancellation: false,
+                  noiseSuppression: false,
+                  autoGainControl: true,
+                },
+              }),
+              10000,
+              "麦克风权限请求超时（请检查浏览器站点权限/系统隐私设置）",
+            );
+            micStream = stream;
+
+            const options = {};
+            if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
+              options.mimeType = "audio/webm;codecs=opus";
+            } else if (MediaRecorder.isTypeSupported("audio/webm")) {
+              options.mimeType = "audio/webm";
+            }
+
+            mediaRecorder = new MediaRecorder(stream, options);
+            mediaRecorder.ondataavailable = (event) => {
+              if (event.data && event.data.size > 0) asrChunks.push(event.data);
+            };
+
+            mediaRecorder.onstop = async () => {
+              try {
+                if (asrChunks.length === 0) {
+                  voiceStatus.textContent = "录音数据为空，请重试";
+                  return;
+                }
+                voiceStatus.textContent = "正在转换音频格式(PCM16k)...";
+
+                const audioBlob = new Blob(asrChunks, {
+                  type: mediaRecorder.mimeType,
+                });
+                asrChunks = [];
+
+                const pcmArrayBuffer =
+                  await blobToPcm16kInt16ArrayBuffer(audioBlob);
+                const base64Pcm = arrayBufferToBase64(pcmArrayBuffer);
+                const wavArrayBuffer = pcm16ToWavArrayBuffer(
+                  pcmArrayBuffer,
+                  16000,
+                  1,
+                );
+                lastRecordingWavBase64 = arrayBufferToBase64(wavArrayBuffer);
+
+                await sendPcmToServer(base64Pcm);
+              } catch (err) {
+                console.error("录音停止处理失败:", err);
+                voiceStatus.textContent = "音频处理失败: " + err.message;
+              }
+            };
+
+            voiceStatus.textContent = "点击麦克风开始录音";
+            voiceButton.disabled = false;
+
+            return true;
+          } catch (error) {
+            console.error("语音识别初始化失败:", error);
+            voiceStatus.textContent = "麦克风权限获取失败: " + error.message;
+            voiceButton.disabled = true;
+            return false;
+          }
+        })();
+
+        const ok = await micInitPromise;
+        if (!ok) micInitPromise = null;
+        return ok;
+      }
+
+      async function toggleRecording() {
+        if (!mediaRecorder) {
+          voiceStatus.textContent = "正在请求麦克风权限...";
+          const ok = await initVoiceRecognition();
+          if (!ok || !mediaRecorder) return;
+        }
+        if (isScoreRecording) {
+          alert("正在进行评分录音，请先结束");
+          return;
+        }
+
+        if (!isRecording) {
+          asrChunks = [];
+          mediaRecorder.start();
+          isRecording = true;
+          voiceButton.classList.add("recording");
+          voiceButton.innerHTML = "⏹️";
+          voiceStatus.textContent = "录音中... 点击停止";
+          const scoreBtn = document.getElementById("scoreLastRecordingTrigger");
+          if (scoreBtn) scoreBtn.disabled = true;
+        } else {
+          mediaRecorder.stop();
+          isRecording = false;
+          voiceButton.classList.remove("recording");
+          voiceButton.innerHTML = "🎤";
+          voiceStatus.textContent = "识别中...";
+          const scoreBtn = document.getElementById("scoreLastRecordingTrigger");
+          if (scoreBtn) scoreBtn.disabled = false;
+        }
+      }
+
+      async function sendPcmToServer(base64Pcm) {
+        try {
+          voiceStatus.textContent = "识别中...";
+
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+          console.info("[ASR] request", {
+            url: `${VOICE_API_URL}/api/voice/start`,
+            audio_data_len: (base64Pcm || "").length,
+            audio_format: "pcm16le_16k_mono",
+          });
+
+          const response = await fetch(`${VOICE_API_URL}/api/voice/start`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              audio_data: base64Pcm,
+              audio_format: "pcm16le_16k_mono",
+            }),
+            signal: controller.signal,
+          });
+
+          clearTimeout(timeoutId);
+
+          const result = await response.json().catch(() => ({}));
+          console.info("[ASR] response", {
+            ok: response.ok,
+            status: response.status,
+            result,
+          });
+          if (!response.ok) {
+            console.error("语音识别服务错误:", result);
+            voiceStatus.textContent =
+              "语音识别服务错误: " +
+              (result.error || JSON.stringify(result) || response.status);
+            return;
+          }
+
+          const text = (result.text || "").trim();
+          if (!text) {
+            const dbg = result && result.debug ? result.debug : {};
+            const audio = dbg && dbg.audio ? dbg.audio : {};
+            const asr = dbg && dbg.asr ? dbg.asr : {};
+            const len = (base64Pcm || "").length;
+            const dur =
+              typeof audio.duration_sec === "number"
+                ? audio.duration_sec.toFixed(2)
+                : "-";
+            const rms =
+              typeof audio.rms === "number" ? Math.round(audio.rms) : "-";
+            const peak = typeof audio.peak === "number" ? audio.peak : "-";
+            const zf =
+              typeof audio.zero_frac === "number"
+                ? audio.zero_frac.toFixed(2)
+                : "-";
+            const model = asr.model || "-";
+            const code =
+              asr.code || asr.status_code || ""
+                ? asr.code || asr.status_code
+                : "";
+            voiceStatus.textContent = `未识别到文本（len=${len} dur=${dur}s rms=${rms} peak=${peak} zero=${zf} model=${model}${code ? " code=" + code : ""}）`;
+            return;
+          }
+
+          messageInput.value = text;
+          voiceStatus.textContent = "识别完成，已发送";
+          await sendMessage();
+        } catch (error) {
+          console.error("发送音频失败:", error);
+          voiceStatus.textContent =
+            error.name === "AbortError"
+              ? "识别请求超时（后端30秒内未返回）"
+              : "发送音频失败: " + error.message;
+        }
+      }
+
+      function guessAudioFormatFromFile(file) {
+        if (!file) return "wav";
+        const name = file.name || "";
+        const idx = name.lastIndexOf(".");
+        let ext = idx >= 0 ? name.slice(idx + 1).toLowerCase() : "";
+        if (!ext && file.type)
+          ext = (file.type.split("/").pop() || "").toLowerCase();
+        if (ext === "mpeg") ext = "mp3";
+        if (ext === "x-wav" || ext === "wave") ext = "wav";
+        return ext || "wav";
+      }
+
+      async function scoreAudioBase64(audioBase64, audioFormat) {
+        const voiceType =
+          scoreVoiceTypeChosen ||
+          document.getElementById("voiceType")?.value ||
+          "女高音 Soprano";
+        const modal = document.getElementById("audioScoringModal");
+        if (modal && !modal.classList.contains("active"))
+          modal.classList.add("active");
+        emotionTotals = null;
+        emotionFrameCount = 0;
+        showLoadingScoring();
+
+        try {
+          const scoringResult = await sendAudioForScoring(
+            audioBase64,
+            voiceType,
+            audioFormat || "wav",
+          );
+          displayScoringResults(scoringResult);
+        } catch (error) {
+          console.error("音频评分失败:", error);
+          showError("音频评分失败: " + error.message);
+        }
+      }
+
+      function resetScoreVoiceModalUi() {
+        setScoreVoiceModalRecordingState(false);
+        const resultsDiv = document.getElementById("scoreScoringResults");
+        if (resultsDiv) resultsDiv.style.display = "none";
+        const pieContainer = document.getElementById(
+          "scoreEmotionPieContainer",
+        );
+        if (pieContainer) pieContainer.style.display = "none";
+        const rainbow = document.getElementById("scoreEmotionRainbow");
+        if (rainbow) rainbow.style.display = "none";
+        const live = document.getElementById("scoreEmotionLive");
+        if (live) live.style.display = "none";
+        const status = document.getElementById("scoreEmotionStatus");
+        if (status) status.textContent = "未启动";
+      }
+
+      function setScoreVoiceModalRecordingState(recording) {
+        const startBtn = document.getElementById("scoreVoiceStartBtn");
+        const stopBtn = document.getElementById("scoreVoiceStopBtn");
+        const cancelBtn = document.getElementById("scoreVoiceCancelBtn");
+        const voiceTypeSel = document.getElementById("scoreVoiceType");
+
+        if (startBtn) {
+          startBtn.style.display = recording ? "none" : "block";
+          if (!recording) {
+            startBtn.disabled = false;
+            startBtn.textContent = "开始录音评分";
           }
         }
-      });
-    }
-
-    function writeAscii(view, offset, str) {
-      for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
-    }
-
-    function pcm16ToWavArrayBuffer(pcm16ArrayBuffer, sampleRate = 16000, numChannels = 1) {
-      const pcmBytes = new Uint8Array(pcm16ArrayBuffer);
-      const dataLen = pcmBytes.byteLength;
-      const buffer = new ArrayBuffer(44 + dataLen);
-      const view = new DataView(buffer);
-
-      writeAscii(view, 0, 'RIFF');
-      view.setUint32(4, 36 + dataLen, true);
-      writeAscii(view, 8, 'WAVE');
-      writeAscii(view, 12, 'fmt ');
-      view.setUint32(16, 16, true);
-      view.setUint16(20, 1, true);
-      view.setUint16(22, numChannels, true);
-      view.setUint32(24, sampleRate, true);
-      view.setUint32(28, sampleRate * numChannels * 2, true);
-      view.setUint16(32, numChannels * 2, true);
-      view.setUint16(34, 16, true);
-      writeAscii(view, 36, 'data');
-      view.setUint32(40, dataLen, true);
-
-      new Uint8Array(buffer, 44).set(pcmBytes);
-      return buffer;
-    }
-
-    async function blobToPcm16kInt16ArrayBuffer(audioBlob) {
-      const arrayBuffer = await audioBlob.arrayBuffer();
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      const audioCtx = new AudioCtx();
-      let decoded = null;
-      try {
-        decoded = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
-      } catch (_) {
-        await new Promise(r => setTimeout(r, 50));
-        decoded = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
-      } finally {
-        try { await audioCtx.close(); } catch (_) {}
+        if (stopBtn) {
+          stopBtn.style.display = recording ? "block" : "none";
+          stopBtn.disabled = false;
+          stopBtn.textContent = "停止录音";
+        }
+        if (cancelBtn) cancelBtn.style.display = recording ? "none" : "block";
+        if (voiceTypeSel) voiceTypeSel.disabled = !!recording;
       }
 
-      const targetSampleRate = 16000;
-      const length = Math.round(decoded.duration * targetSampleRate);
-      const offline = new OfflineAudioContext(1, length, targetSampleRate);
-
-      const source = offline.createBufferSource();
-      source.buffer = decoded;
-      source.connect(offline.destination);
-      source.start(0);
-
-      const rendered = await offline.startRendering();
-
-      const float32 = rendered.getChannelData(0);
-      const int16 = new Int16Array(float32.length);
-      for (let i = 0; i < float32.length; i++) {
-        const s = Math.max(-1, Math.min(1, float32[i]));
-        int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-      }
-      return int16.buffer;
-    }
-
-    async function blobToPcmInt16ArrayBuffer(audioBlob, targetSampleRate) {
-      const arrayBuffer = await audioBlob.arrayBuffer();
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      const audioCtx = new AudioCtx();
-      let decoded = null;
-      try {
-        decoded = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
-      } catch (_) {
-        await new Promise(r => setTimeout(r, 50));
-        decoded = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
-      } finally {
-        try { await audioCtx.close(); } catch (_) {}
+      function stopScoreRecordingFromModal() {
+        stopEmotionCapture();
+        if (isScoreRecording) {
+          const stopBtn = document.getElementById("scoreVoiceStopBtn");
+          if (stopBtn) {
+            stopBtn.disabled = true;
+            stopBtn.textContent = "评分中...";
+          }
+          if (scoreRecorder && scoreRecorder.state !== "inactive") {
+            try {
+              scoreRecorder.stop();
+            } catch (_) {}
+          }
+          return;
+        }
+        const scoreBtn = document.getElementById("scoreLastRecordingTrigger");
+        if (scoreBtn) scoreBtn.innerHTML = isScoreRecording ? "⏹️" : "🎼";
+        setScoreVoiceModalRecordingState(false);
       }
 
-      const length = Math.round(decoded.duration * targetSampleRate);
-      const offline = new OfflineAudioContext(1, length, targetSampleRate);
-
-      const source = offline.createBufferSource();
-      source.buffer = decoded;
-      source.connect(offline.destination);
-      source.start(0);
-
-      const rendered = await offline.startRendering();
-
-      const float32 = rendered.getChannelData(0);
-      const int16 = new Int16Array(float32.length);
-      for (let i = 0; i < float32.length; i++) {
-        const s = Math.max(-1, Math.min(1, float32[i]));
-        int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+      function openScoreVoiceModal() {
+        const modal = document.getElementById("scoreVoiceModal");
+        if (modal) modal.classList.add("active");
+        resetScoreVoiceModalUi();
       }
-      return int16.buffer;
-    }
 
-    async function initVoiceRecognition() {
-      if (micStream) return true;
-      if (micInitPromise) return micInitPromise;
-      micInitPromise = (async () => {
-        try {
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          voiceStatus.textContent = '浏览器不支持录音功能';
-          voiceButton.disabled = true;
-          return false;
+      function closeScoreVoiceModal() {
+        stopScoreRecordingFromModal();
+        const modal = document.getElementById("scoreVoiceModal");
+        if (modal) modal.classList.remove("active");
+        resetScoreVoiceModalUi();
+      }
+
+      async function confirmScoreVoiceAndStart() {
+        if (isRecording) {
+          alert("正在进行语音输入录音，请先结束");
+          return;
+        }
+        if (isScoreRecording) return;
+
+        const startBtn = document.getElementById("scoreVoiceStartBtn");
+        if (startBtn) {
+          startBtn.disabled = true;
+          startBtn.textContent = "正在初始化...";
         }
 
-        const stream = await promiseWithTimeout(navigator.mediaDevices.getUserMedia({
-          audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: true }
-        }), 10000, '麦克风权限请求超时（请检查浏览器站点权限/系统隐私设置）');
-        micStream = stream;
+        const sel = document.getElementById("scoreVoiceType");
+        scoreVoiceTypeChosen = sel && sel.value ? sel.value : "女高音 Soprano";
+
+        const status = document.getElementById("scoreEmotionStatus");
+        if (status) status.textContent = "正在启动摄像头预览...";
+        await startEmotionCapture({
+          liveId: "scoreEmotionLive",
+          videoId: "scoreEmotionVideo",
+          statusId: "scoreEmotionStatus",
+        });
+
+        if (!micStream) {
+          if (status) status.textContent = "请在浏览器提示中允许麦克风权限...";
+          voiceStatus.textContent = "正在请求麦克风权限...";
+          const ok = await initVoiceRecognition();
+          if (!ok) {
+            if (status)
+              status.textContent = "麦克风权限未获取，无法开始录音评分";
+            if (startBtn) {
+              startBtn.disabled = false;
+              startBtn.textContent = "开始录音评分";
+            }
+            return;
+          }
+        }
+
+        try {
+          beginScoreRecording();
+        } catch (e) {
+          if (status)
+            status.textContent = "开始录音失败：" + (e?.message || String(e));
+          if (startBtn) {
+            startBtn.disabled = false;
+            startBtn.textContent = "开始录音评分";
+          }
+        }
+      }
+
+      function beginScoreRecording() {
+        if (!micStream) {
+          voiceStatus.textContent = "语音识别未初始化";
+          return;
+        }
+        if (isRecording) {
+          alert("正在进行语音输入录音，请先结束");
+          return;
+        }
+        if (isScoreRecording) return;
+
+        setScoreVoiceModalRecordingState(true);
+        const resultsDiv = document.getElementById("scoreScoringResults");
+        if (resultsDiv) resultsDiv.style.display = "none";
+        const pieContainer = document.getElementById(
+          "scoreEmotionPieContainer",
+        );
+        if (pieContainer) pieContainer.style.display = "none";
 
         const options = {};
-        if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
-          options.mimeType = 'audio/webm;codecs=opus';
-        } else if (MediaRecorder.isTypeSupported('audio/webm')) {
-          options.mimeType = 'audio/webm';
-        }
+        let mime = "";
+        if (MediaRecorder.isTypeSupported("audio/mpeg")) mime = "audio/mpeg";
+        else if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus"))
+          mime = "audio/webm;codecs=opus";
+        else if (MediaRecorder.isTypeSupported("audio/webm"))
+          mime = "audio/webm";
+        else if (MediaRecorder.isTypeSupported("audio/ogg;codecs=opus"))
+          mime = "audio/ogg;codecs=opus";
+        if (mime) options.mimeType = mime;
 
-        mediaRecorder = new MediaRecorder(stream, options);
-        mediaRecorder.ondataavailable = (event) => { if (event.data && event.data.size > 0) asrChunks.push(event.data); };
-
-        mediaRecorder.onstop = async () => {
+        scoreRecorder = new MediaRecorder(micStream, options);
+        scoreChunks = [];
+        scoreRecorder.ondataavailable = (event) => {
+          if (event.data && event.data.size > 0) scoreChunks.push(event.data);
+        };
+        scoreRecorder.onstop = async () => {
           try {
-            if (asrChunks.length === 0) { voiceStatus.textContent = '录音数据为空，请重试'; return; }
-            voiceStatus.textContent = '正在转换音频格式(PCM16k)...';
+            if (!scoreChunks.length) {
+              voiceStatus.textContent = "录音数据为空，请重试";
+              return;
+            }
+            voiceStatus.textContent = "评分中...";
 
-            const audioBlob = new Blob(asrChunks, { type: mediaRecorder.mimeType });
-            asrChunks = [];
+            const audioBlob = new Blob(scoreChunks, {
+              type: scoreRecorder.mimeType,
+            });
+            scoreChunks = [];
 
-            const pcmArrayBuffer = await blobToPcm16kInt16ArrayBuffer(audioBlob);
-            const base64Pcm = arrayBufferToBase64(pcmArrayBuffer);
-            const wavArrayBuffer = pcm16ToWavArrayBuffer(pcmArrayBuffer, 16000, 1);
-            lastRecordingWavBase64 = arrayBufferToBase64(wavArrayBuffer);
+            const canEncodeMp3 = window.lamejs && window.lamejs.Mp3Encoder;
+            if (canEncodeMp3) {
+              const pcmBuffer = await blobToPcmInt16ArrayBuffer(
+                audioBlob,
+                44100,
+              );
+              const pcm16 = new Int16Array(pcmBuffer);
+              const mp3Encoder = new lamejs.Mp3Encoder(1, 44100, 128);
+              const mp3Data = [];
+              const sampleBlockSize = 1152;
 
-            await sendPcmToServer(base64Pcm);
-          } catch (err) {
-            console.error('录音停止处理失败:', err);
-            voiceStatus.textContent = '音频处理失败: ' + err.message;
+              for (let i = 0; i < pcm16.length; i += sampleBlockSize) {
+                const chunk = pcm16.subarray(i, i + sampleBlockSize);
+                const mp3Chunk = mp3Encoder.encodeBuffer(chunk);
+                if (mp3Chunk && mp3Chunk.length)
+                  mp3Data.push(new Uint8Array(mp3Chunk));
+              }
+              const finalChunk = mp3Encoder.flush();
+              if (finalChunk && finalChunk.length)
+                mp3Data.push(new Uint8Array(finalChunk));
+
+              const mp3Blob = new Blob(mp3Data, { type: "audio/mpeg" });
+              const mp3Ab = await mp3Blob.arrayBuffer();
+              lastScoreRecordingBase64 = arrayBufferToBase64(mp3Ab);
+              lastScoreRecordingFormat = "mp3";
+            } else {
+              const pcmBuffer = await blobToPcmInt16ArrayBuffer(
+                audioBlob,
+                44100,
+              );
+              const wavArrayBuffer = pcm16ToWavArrayBuffer(pcmBuffer, 44100, 1);
+              lastScoreRecordingBase64 = arrayBufferToBase64(wavArrayBuffer);
+              lastScoreRecordingFormat = "wav";
+            }
+
+            showLoadingScoring("scoreScoringResults");
+            const scoringResult = await sendAudioForScoring(
+              lastScoreRecordingBase64,
+              scoreVoiceTypeChosen,
+              lastScoreRecordingFormat,
+            );
+            displayScoringResultsTo(scoringResult, {
+              resultsId: "scoreScoringResults",
+              overallId: "scoreOverallScore",
+              techniqueId: "scoreTechniqueScores",
+              chartBarsId: "scoreChartBars",
+              emotionRainbowId: "scoreEmotionRainbow",
+              emotionContainerId: "scoreEmotionPieContainer",
+              emotionCanvasId: "scoreEmotionPieChart",
+            });
+          } catch (e) {
+            console.error(e);
+            showError("音频评分失败: " + e.message, "scoreScoringResults");
+          } finally {
+            isScoreRecording = false;
+            const scoreBtn = document.getElementById(
+              "scoreLastRecordingTrigger",
+            );
+            if (scoreBtn) scoreBtn.innerHTML = "🎼";
+            voiceButton.disabled = false;
+            setScoreVoiceModalRecordingState(false);
           }
         };
 
-        voiceStatus.textContent = '点击麦克风开始录音';
-        voiceButton.disabled = false;
+        const scoreBtn = document.getElementById("scoreLastRecordingTrigger");
+        scoreRecorder.start();
+        isScoreRecording = true;
 
-        return true;
-        } catch (error) {
-        console.error('语音识别初始化失败:', error);
-        voiceStatus.textContent = '麦克风权限获取失败: ' + error.message;
+        if (scoreBtn) scoreBtn.innerHTML = "⏹️";
         voiceButton.disabled = true;
-        return false;
+        voiceStatus.textContent = "评分录音中... 请在弹窗内点击“停止录音”";
+      }
+
+      async function toggleScoreRecording() {
+        if (isRecording) {
+          alert("正在进行语音输入录音，请先结束");
+          return;
         }
-      })();
 
-      const ok = await micInitPromise;
-      if (!ok) micInitPromise = null;
-      return ok;
-    }
-
-    async function toggleRecording() {
-      if (!mediaRecorder) {
-        voiceStatus.textContent = '正在请求麦克风权限...';
-        const ok = await initVoiceRecognition();
-        if (!ok || !mediaRecorder) return;
+        const scoreBtn = document.getElementById("scoreLastRecordingTrigger");
+        if (!isScoreRecording) {
+          openScoreVoiceModal();
+          if (!micStream) {
+            voiceStatus.textContent = "正在请求麦克风权限...";
+            await initVoiceRecognition();
+          }
+        } else {
+          openScoreVoiceModal();
+          if (scoreBtn) scoreBtn.innerHTML = "⏹️";
+        }
       }
-      if (isScoreRecording) { alert('正在进行评分录音，请先结束'); return; }
 
-      if (!isRecording) {
-        asrChunks = [];
-        mediaRecorder.start();
-        isRecording = true;
-        voiceButton.classList.add('recording');
-        voiceButton.innerHTML = '⏹️';
-        voiceStatus.textContent = '录音中... 点击停止';
-        const scoreBtn = document.getElementById('scoreLastRecordingTrigger');
-        if (scoreBtn) scoreBtn.disabled = true;
-      } else {
-        mediaRecorder.stop();
-        isRecording = false;
-        voiceButton.classList.remove('recording');
-        voiceButton.innerHTML = '🎤';
-        voiceStatus.textContent = '识别中...';
-        const scoreBtn = document.getElementById('scoreLastRecordingTrigger');
-        if (scoreBtn) scoreBtn.disabled = false;
+      // =========================
+      // 聊天：SSE 流式输出
+      // =========================
+      function addMessage(text, sender) {
+        const messageDiv = document.createElement("div");
+        messageDiv.className = `message message-${sender}`;
+        messageDiv.textContent = text;
+        chatMessages.appendChild(messageDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+        return messageDiv;
       }
-    }
 
-    async function sendPcmToServer(base64Pcm) {
-      try {
-        voiceStatus.textContent = '识别中...';
+      function handleKeyPress(event) {
+        if (event.key === "Enter") sendMessage();
+      }
+
+      function createStreamingBotMessage() {
+        const div = document.createElement("div");
+        div.className = "message message-bot";
+        div.textContent = "";
+        chatMessages.appendChild(div);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+        return div;
+      }
+
+      function extractSseEvents(buffer) {
+        const events = [];
+        let idx;
+        while ((idx = buffer.indexOf("\n\n")) !== -1) {
+          const rawEvent = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 2);
+
+          const lines = rawEvent.split("\n");
+          for (const line of lines) {
+            if (line.startsWith("data:")) {
+              const dataStr = line.slice(5).trim();
+              if (dataStr) events.push(dataStr);
+            }
+          }
+        }
+        return { events, rest: buffer };
+      }
+
+      async function sendMessage() {
+        const message = messageInput.value.trim();
+        if (!message) return;
+
+        addMessage(message, "user");
+        messageInput.value = "";
+        chatHistory.push({ role: "user", content: withScoreRule(message) });
+
+        const botDiv = createStreamingBotMessage();
 
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000);
+        const timeoutId = setTimeout(() => controller.abort(), 120000);
 
-        console.info('[ASR] request', {
-          url: `${VOICE_API_URL}/api/voice/start`,
-          audio_data_len: (base64Pcm || '').length,
-          audio_format: 'pcm16le_16k_mono'
-        });
+        // 新一轮：清空 TTS 缓冲
+        ttsTextBuf = "";
+        ttsUrlQueue = [];
+        ttsUrlPlaying = false;
+        if (ttsAudioEl) ttsAudioEl.pause();
 
-        const response = await fetch(`${VOICE_API_URL}/api/voice/start`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ audio_data: base64Pcm, audio_format: 'pcm16le_16k_mono' }),
-          signal: controller.signal
-        });
-
-        clearTimeout(timeoutId);
-
-        const result = await response.json().catch(() => ({}));
-        console.info('[ASR] response', { ok: response.ok, status: response.status, result });
-        if (!response.ok) {
-          console.error('语音识别服务错误:', result);
-          voiceStatus.textContent = '语音识别服务错误: ' + (result.error || JSON.stringify(result) || response.status);
-          return;
-        }
-
-        const text = (result.text || '').trim();
-        if (!text) {
-          const dbg = result && result.debug ? result.debug : {};
-          const audio = dbg && dbg.audio ? dbg.audio : {};
-          const asr = dbg && dbg.asr ? dbg.asr : {};
-          const len = (base64Pcm || '').length;
-          const dur = (typeof audio.duration_sec === 'number') ? audio.duration_sec.toFixed(2) : '-';
-          const rms = (typeof audio.rms === 'number') ? Math.round(audio.rms) : '-';
-          const peak = (typeof audio.peak === 'number') ? audio.peak : '-';
-          const zf = (typeof audio.zero_frac === 'number') ? audio.zero_frac.toFixed(2) : '-';
-          const model = asr.model || '-';
-          const code = (asr.code || asr.status_code || '') ? (asr.code || asr.status_code) : '';
-          voiceStatus.textContent = `未识别到文本（len=${len} dur=${dur}s rms=${rms} peak=${peak} zero=${zf} model=${model}${code ? ' code=' + code : ''}）`;
-          return;
-        }
-
-        messageInput.value = text;
-        voiceStatus.textContent = '识别完成，已发送';
-        await sendMessage();
-      } catch (error) {
-        console.error('发送音频失败:', error);
-        voiceStatus.textContent = (error.name === 'AbortError') ? '识别请求超时（后端30秒内未返回）' : ('发送音频失败: ' + error.message);
-      }
-    }
-
-    function guessAudioFormatFromFile(file) {
-      if (!file) return 'wav';
-      const name = file.name || '';
-      const idx = name.lastIndexOf('.');
-      let ext = idx >= 0 ? name.slice(idx + 1).toLowerCase() : '';
-      if (!ext && file.type) ext = (file.type.split('/').pop() || '').toLowerCase();
-      if (ext === 'mpeg') ext = 'mp3';
-      if (ext === 'x-wav' || ext === 'wave') ext = 'wav';
-      return ext || 'wav';
-    }
-
-    async function scoreAudioBase64(audioBase64, audioFormat) {
-      const voiceType = scoreVoiceTypeChosen || document.getElementById('voiceType')?.value || '女高音 Soprano';
-      const modal = document.getElementById('audioScoringModal');
-      if (modal && !modal.classList.contains('active')) modal.classList.add('active');
-      emotionTotals = null;
-      emotionFrameCount = 0;
-      showLoadingScoring();
-
-      try {
-        const scoringResult = await sendAudioForScoring(audioBase64, voiceType, audioFormat || 'wav');
-        displayScoringResults(scoringResult);
-      } catch (error) {
-        console.error('音频评分失败:', error);
-        showError('音频评分失败: ' + error.message);
-      }
-    }
-
-    function resetScoreVoiceModalUi() {
-      setScoreVoiceModalRecordingState(false);
-      const resultsDiv = document.getElementById('scoreScoringResults');
-      if (resultsDiv) resultsDiv.style.display = 'none';
-      const pieContainer = document.getElementById('scoreEmotionPieContainer');
-      if (pieContainer) pieContainer.style.display = 'none';
-      const rainbow = document.getElementById('scoreEmotionRainbow');
-      if (rainbow) rainbow.style.display = 'none';
-      const live = document.getElementById('scoreEmotionLive');
-      if (live) live.style.display = 'none';
-      const status = document.getElementById('scoreEmotionStatus');
-      if (status) status.textContent = '未启动';
-    }
-
-    function setScoreVoiceModalRecordingState(recording) {
-      const startBtn = document.getElementById('scoreVoiceStartBtn');
-      const stopBtn = document.getElementById('scoreVoiceStopBtn');
-      const cancelBtn = document.getElementById('scoreVoiceCancelBtn');
-      const voiceTypeSel = document.getElementById('scoreVoiceType');
-
-      if (startBtn) {
-        startBtn.style.display = recording ? 'none' : 'block';
-        if (!recording) {
-          startBtn.disabled = false;
-          startBtn.textContent = '开始录音评分';
-        }
-      }
-      if (stopBtn) {
-        stopBtn.style.display = recording ? 'block' : 'none';
-        stopBtn.disabled = false;
-        stopBtn.textContent = '停止录音';
-      }
-      if (cancelBtn) cancelBtn.style.display = recording ? 'none' : 'block';
-      if (voiceTypeSel) voiceTypeSel.disabled = !!recording;
-    }
-
-    function stopScoreRecordingFromModal() {
-      stopEmotionCapture();
-      if (isScoreRecording) {
-        const stopBtn = document.getElementById('scoreVoiceStopBtn');
-        if (stopBtn) {
-          stopBtn.disabled = true;
-          stopBtn.textContent = '评分中...';
-        }
-        if (scoreRecorder && scoreRecorder.state !== 'inactive') {
-          try { scoreRecorder.stop(); } catch (_) {}
-        }
-        return;
-      }
-      const scoreBtn = document.getElementById('scoreLastRecordingTrigger');
-      if (scoreBtn) scoreBtn.innerHTML = isScoreRecording ? '⏹️' : '🎼';
-      setScoreVoiceModalRecordingState(false);
-    }
-
-    function openScoreVoiceModal() {
-      const modal = document.getElementById('scoreVoiceModal');
-      if (modal) modal.classList.add('active');
-      resetScoreVoiceModalUi();
-    }
-
-    function closeScoreVoiceModal() {
-      stopScoreRecordingFromModal();
-      const modal = document.getElementById('scoreVoiceModal');
-      if (modal) modal.classList.remove('active');
-      resetScoreVoiceModalUi();
-    }
-
-    async function confirmScoreVoiceAndStart() {
-      if (isRecording) { alert('正在进行语音输入录音，请先结束'); return; }
-      if (isScoreRecording) return;
-
-      const startBtn = document.getElementById('scoreVoiceStartBtn');
-      if (startBtn) {
-        startBtn.disabled = true;
-        startBtn.textContent = '正在初始化...';
-      }
-
-      const sel = document.getElementById('scoreVoiceType');
-      scoreVoiceTypeChosen = (sel && sel.value) ? sel.value : '女高音 Soprano';
-
-      const status = document.getElementById('scoreEmotionStatus');
-      if (status) status.textContent = '正在启动摄像头预览...';
-      await startEmotionCapture({ liveId: 'scoreEmotionLive', videoId: 'scoreEmotionVideo', statusId: 'scoreEmotionStatus' });
-
-      if (!micStream) {
-        if (status) status.textContent = '请在浏览器提示中允许麦克风权限...';
-        voiceStatus.textContent = '正在请求麦克风权限...';
-        const ok = await initVoiceRecognition();
-        if (!ok) {
-          if (status) status.textContent = '麦克风权限未获取，无法开始录音评分';
-          if (startBtn) {
-            startBtn.disabled = false;
-            startBtn.textContent = '开始录音评分';
-          }
-          return;
-        }
-      }
-
-      try {
-        beginScoreRecording();
-      } catch (e) {
-        if (status) status.textContent = '开始录音失败：' + (e?.message || String(e));
-        if (startBtn) {
-          startBtn.disabled = false;
-          startBtn.textContent = '开始录音评分';
-        }
-      }
-    }
-
-    function beginScoreRecording() {
-      if (!micStream) { voiceStatus.textContent = '语音识别未初始化'; return; }
-      if (isRecording) { alert('正在进行语音输入录音，请先结束'); return; }
-      if (isScoreRecording) return;
-
-      setScoreVoiceModalRecordingState(true);
-      const resultsDiv = document.getElementById('scoreScoringResults');
-      if (resultsDiv) resultsDiv.style.display = 'none';
-      const pieContainer = document.getElementById('scoreEmotionPieContainer');
-      if (pieContainer) pieContainer.style.display = 'none';
-
-      const options = {};
-      let mime = '';
-      if (MediaRecorder.isTypeSupported('audio/mpeg')) mime = 'audio/mpeg';
-      else if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) mime = 'audio/webm;codecs=opus';
-      else if (MediaRecorder.isTypeSupported('audio/webm')) mime = 'audio/webm';
-      else if (MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')) mime = 'audio/ogg;codecs=opus';
-      if (mime) options.mimeType = mime;
-
-      scoreRecorder = new MediaRecorder(micStream, options);
-      scoreChunks = [];
-      scoreRecorder.ondataavailable = (event) => { if (event.data && event.data.size > 0) scoreChunks.push(event.data); };
-      scoreRecorder.onstop = async () => {
-        try {
-          if (!scoreChunks.length) { voiceStatus.textContent = '录音数据为空，请重试'; return; }
-          voiceStatus.textContent = '评分中...';
-
-          const audioBlob = new Blob(scoreChunks, { type: scoreRecorder.mimeType });
-          scoreChunks = [];
-
-          const canEncodeMp3 = (window.lamejs && window.lamejs.Mp3Encoder);
-          if (canEncodeMp3) {
-            const pcmBuffer = await blobToPcmInt16ArrayBuffer(audioBlob, 44100);
-            const pcm16 = new Int16Array(pcmBuffer);
-            const mp3Encoder = new lamejs.Mp3Encoder(1, 44100, 128);
-            const mp3Data = [];
-            const sampleBlockSize = 1152;
-
-            for (let i = 0; i < pcm16.length; i += sampleBlockSize) {
-              const chunk = pcm16.subarray(i, i + sampleBlockSize);
-              const mp3Chunk = mp3Encoder.encodeBuffer(chunk);
-              if (mp3Chunk && mp3Chunk.length) mp3Data.push(new Uint8Array(mp3Chunk));
-            }
-            const finalChunk = mp3Encoder.flush();
-            if (finalChunk && finalChunk.length) mp3Data.push(new Uint8Array(finalChunk));
-
-            const mp3Blob = new Blob(mp3Data, { type: 'audio/mpeg' });
-            const mp3Ab = await mp3Blob.arrayBuffer();
-            lastScoreRecordingBase64 = arrayBufferToBase64(mp3Ab);
-            lastScoreRecordingFormat = 'mp3';
-          } else {
-            const pcmBuffer = await blobToPcmInt16ArrayBuffer(audioBlob, 44100);
-            const wavArrayBuffer = pcm16ToWavArrayBuffer(pcmBuffer, 44100, 1);
-            lastScoreRecordingBase64 = arrayBufferToBase64(wavArrayBuffer);
-            lastScoreRecordingFormat = 'wav';
-          }
-
-          showLoadingScoring('scoreScoringResults');
-          const scoringResult = await sendAudioForScoring(lastScoreRecordingBase64, scoreVoiceTypeChosen, lastScoreRecordingFormat);
-          displayScoringResultsTo(scoringResult, {
-            resultsId: 'scoreScoringResults',
-            overallId: 'scoreOverallScore',
-            techniqueId: 'scoreTechniqueScores',
-            chartBarsId: 'scoreChartBars',
-            emotionRainbowId: 'scoreEmotionRainbow',
-            emotionContainerId: 'scoreEmotionPieContainer',
-            emotionCanvasId: 'scoreEmotionPieChart'
-          });
-        } catch (e) {
-          console.error(e);
-          showError('音频评分失败: ' + e.message, 'scoreScoringResults');
-        } finally {
-          isScoreRecording = false;
-          const scoreBtn = document.getElementById('scoreLastRecordingTrigger');
-          if (scoreBtn) scoreBtn.innerHTML = '🎼';
-          voiceButton.disabled = false;
-          setScoreVoiceModalRecordingState(false);
-        }
-      };
-
-      const scoreBtn = document.getElementById('scoreLastRecordingTrigger');
-      scoreRecorder.start();
-      isScoreRecording = true;
-
-      if (scoreBtn) scoreBtn.innerHTML = '⏹️';
-      voiceButton.disabled = true;
-      voiceStatus.textContent = '评分录音中... 请在弹窗内点击“停止录音”';
-    }
-
-    async function toggleScoreRecording() {
-      if (isRecording) { alert('正在进行语音输入录音，请先结束'); return; }
-
-      const scoreBtn = document.getElementById('scoreLastRecordingTrigger');
-      if (!isScoreRecording) {
-        openScoreVoiceModal();
-        if (!micStream) {
-          voiceStatus.textContent = '正在请求麦克风权限...';
-          await initVoiceRecognition();
-        }
-      } else {
-        openScoreVoiceModal();
-        if (scoreBtn) scoreBtn.innerHTML = '⏹️';
-      }
-    }
-
-    // =========================
-    // 聊天：SSE 流式输出
-    // =========================
-    function addMessage(text, sender) {
-      const messageDiv = document.createElement('div');
-      messageDiv.className = `message message-${sender}`;
-      messageDiv.textContent = text;
-      chatMessages.appendChild(messageDiv);
-      chatMessages.scrollTop = chatMessages.scrollHeight;
-      return messageDiv;
-    }
-
-    function handleKeyPress(event) { if (event.key === 'Enter') sendMessage(); }
-
-    function createStreamingBotMessage() {
-      const div = document.createElement('div');
-      div.className = 'message message-bot';
-      div.textContent = '';
-      chatMessages.appendChild(div);
-      chatMessages.scrollTop = chatMessages.scrollHeight;
-      return div;
-    }
-
-    function extractSseEvents(buffer) {
-      const events = [];
-      let idx;
-      while ((idx = buffer.indexOf('\n\n')) !== -1) {
-        const rawEvent = buffer.slice(0, idx);
-        buffer = buffer.slice(idx + 2);
-
-        const lines = rawEvent.split('\n');
-        for (const line of lines) {
-          if (line.startsWith('data:')) {
-            const dataStr = line.slice(5).trim();
-            if (dataStr) events.push(dataStr);
-          }
-        }
-      }
-      return { events, rest: buffer };
-    }
-
-    async function sendMessage() {
-      const message = messageInput.value.trim();
-      if (!message) return;
-
-      addMessage(message, 'user');
-      messageInput.value = '';
-      chatHistory.push({ role: 'user', content: message });
-
-      const botDiv = createStreamingBotMessage();
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 120000);
-
-      // 新一轮：清空 TTS 缓冲
-      ttsTextBuf = '';
-      ttsUrlQueue = [];
-      ttsUrlPlaying = false;
-      if (ttsAudioEl) ttsAudioEl.pause();
-
-      // 启用 TTS 时保持长连接，避免每轮握手
-      if (ttsEnabled) {
-        try {
-          await connectTts();
-          startTtsFlushTimer();
-        } catch (_) {}
-      }
-
-      try {
-        const resp = await fetch(`${CHAT_API_URL}/api/chat/stream`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: "qwen-plus", messages: chatHistory }),
-          signal: controller.signal
-        });
-
-        if (!resp.ok || !resp.body) {
-          const errText = await resp.text().catch(() => '');
-          botDiv.textContent = `请求失败：HTTP ${resp.status}\n${errText}`;
-          return;
-        }
-
-        const reader = resp.body.getReader();
-        const decoder = new TextDecoder('utf-8');
-
-        let buffer = '';
-        let fullText = '';
-
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const { events, rest } = extractSseEvents(buffer);
-          buffer = rest;
-
-          for (const dataStr of events) {
-            let obj = null;
-            try { obj = JSON.parse(dataStr); } catch (_) {}
-            if (!obj) continue;
-
-            if (obj.type === 'delta' && obj.delta) {
-              fullText += obj.delta;
-              botDiv.textContent = fullText;
-              chatMessages.scrollTop = chatMessages.scrollHeight;
-
-              // TTS：边出字边喂
-              if (ttsEnabled) ttsFeedDelta(obj.delta);
-
-            } else if (obj.type === 'error') {
-              botDiv.textContent = `模型调用错误：${obj.error}`;
-            }
-          }
-        }
-
-        if (fullText.trim()) {
-          chatHistory.push({ role: 'assistant', content: fullText });
-        } else {
-          const fallback = "我这次没有生成出有效回复。你可以换一种说法再问一次。";
-          botDiv.textContent = fallback;
-          chatHistory.push({ role: 'assistant', content: fallback });
-          fullText = fallback;
-        }
-
-        // 收尾：把尾巴 flush + commit
+        // 启用 TTS 时保持长连接，避免每轮握手
         if (ttsEnabled) {
-          ttsFlushNow();
+          try {
+            await connectTts();
+            startTtsFlushTimer();
+          } catch (_) {}
         }
 
-      } catch (e) {
-        botDiv.textContent = (e.name === 'AbortError')
-          ? '请求超时：后端在 120 秒内未完成响应。'
-          : ('请求异常：' + e.message);
-      } finally {
-        clearTimeout(timeoutId);
-        controller.abort();
-      }
-    }
+        try {
+          const resp = await fetch(`${CHAT_API_URL}/api/chat/stream`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ model: "qwen-plus", messages: chatHistory }),
+            signal: controller.signal,
+          });
 
-    // =========================
-    // 音频评分
-    // =========================
-    async function startScoring() {
-      const fileInput = document.getElementById('audioFile');
-      const voiceType = document.getElementById('voiceType').value;
-      const file = fileInput.files[0];
-      if (!file) { alert('请先选择一个音频文件'); return; }
-
-      const modal = document.getElementById('audioScoringModal');
-      if (modal && !modal.classList.contains('active')) modal.classList.add('active');
-
-      emotionTotals = null;
-      emotionFrameCount = 0;
-      showLoadingScoring();
-
-      try {
-        const arrayBuffer = await file.arrayBuffer();
-        const base64Audio = arrayBufferToBase64(arrayBuffer);
-        const audioFormat = guessAudioFormatFromFile(file);
-        const scoringResult = await sendAudioForScoring(base64Audio, voiceType, audioFormat);
-        displayScoringResults(scoringResult);
-      } catch (error) {
-        console.error('音频评分失败:', error);
-        showError('音频评分失败: ' + error.message);
-      }
-    }
-
-    function showLoadingScoring(resultsId = 'scoringResults') {
-      const resultsDiv = document.getElementById(resultsId);
-      if (!resultsDiv) return;
-      let loadingDiv = resultsDiv.querySelector('.loading');
-      if (!loadingDiv) {
-        loadingDiv = document.createElement('div');
-        loadingDiv.className = 'loading';
-        loadingDiv.innerHTML = `<p>正在分析音频...</p><p>请稍候...</p>`;
-        resultsDiv.insertBefore(loadingDiv, resultsDiv.firstChild);
-      }
-      resultsDiv.style.display = 'block';
-    }
-
-    async function sendAudioForScoring(audioData, voiceType, audioFormat = 'wav') {
-      const response = await fetch(`${API_BASE}/api/audio/score`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          audio_data: audioData,
-          voice_type: voiceType,
-          audio_format: audioFormat
-        })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || '音频评分失败');
-      }
-
-      const result = await response.json();
-
-      if (!result.success) {
-        throw new Error(result.message || '音频评分失败');
-      }
-
-      const scoringResult = {
-        overall: result.overall,
-        scores: result.scores
-      };
-
-      return scoringResult;
-    }
-
-    function displayScoringResultsTo(result, ids) {
-      const resultsDiv = document.getElementById(ids.resultsId);
-      const overallScore = document.getElementById(ids.overallId);
-      const techniqueScores = document.getElementById(ids.techniqueId);
-
-      const loadingDiv = resultsDiv?.querySelector('.loading');
-      if (loadingDiv) loadingDiv.remove();
-
-      if (overallScore) overallScore.textContent = Number(result.overall).toFixed(1);
-
-      if (techniqueScores) {
-        renderKidTechniqueBlocks(result.scores || [], ids.techniqueId);
-      }
-
-      if (resultsDiv) resultsDiv.style.display = 'block';
-      if (ids.emotionRainbowId) renderEmotionRainbow(ids.emotionRainbowId);
-      renderEmotionPieChart(ids.emotionContainerId, ids.emotionCanvasId);
-
-      let scoreDetails = `🎤 音频评分结果\n总体评分: ${Number(result.overall).toFixed(1)}\n\n`;
-      scoreDetails += `各项评分：\n`;
-      (result.scores || []).filter(x => ['open', 'clean', 'resonate'].includes(x.technique)).forEach(item => {
-        const displayName = TECH_NAME_MAP[item.technique] || item.technique;
-        scoreDetails += `• ${displayName}: ${item.score}分\n`;
-      });
-      addMessage(scoreDetails, 'bot');
-
-      sendScoringToLLM(result);
-    }
-
-    function displayScoringResults(result) {
-      displayScoringResultsTo(result, {
-        resultsId: 'scoringResults',
-        overallId: 'overallScore',
-        techniqueId: 'techniqueScores',
-        chartBarsId: 'chartBars',
-        emotionRainbowId: 'emotionRainbow',
-        emotionContainerId: 'emotionPieContainer',
-        emotionCanvasId: 'emotionPieChart'
-      });
-    }
-
-    async function sendScoringToLLM(result) {
-      let promptText = `我刚刚完成了一次音频评分，总体评分是${Number(result.overall).toFixed(1)}分。\n\n`;
-      promptText += `各项评分详情：\n`;
-      (result.scores || []).filter(x => ['open', 'clean', 'resonate'].includes(x.technique)).forEach(item => {
-        const displayName = TECH_NAME_MAP[item.technique] || item.technique;
-        promptText += `• ${displayName}: ${item.score}分\n`;
-      });
-      promptText += `\n根据我的评分，请给出具体的改进建议，帮助我提升发音和表达水平。1分是最高分，5分是最低分`;
-
-      addMessage('正在根据评分生成建议...', 'bot');
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000);
-
-      try {
-        const resp = await fetch(`${CHAT_API_URL}/api/chat/stream`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: "qwen-plus", messages: [{ role: 'user', content: promptText }] }),
-          signal: controller.signal
-        });
-
-        clearTimeout(timeoutId);
-
-        if (!resp.ok || !resp.body) {
-          const lastBotMsg = chatMessages.lastElementChild;
-          if (lastBotMsg?.textContent === '正在根据评分生成建议...') {
-            lastBotMsg.textContent = '生成建议失败';
+          if (!resp.ok || !resp.body) {
+            const errText = await resp.text().catch(() => "");
+            botDiv.textContent = `请求失败：HTTP ${resp.status}\n${errText}`;
+            return;
           }
+
+          const reader = resp.body.getReader();
+          const decoder = new TextDecoder("utf-8");
+
+          let buffer = "";
+          let fullText = "";
+
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const { events, rest } = extractSseEvents(buffer);
+            buffer = rest;
+
+            for (const dataStr of events) {
+              let obj = null;
+              try {
+                obj = JSON.parse(dataStr);
+              } catch (_) {}
+              if (!obj) continue;
+
+              if (obj.type === "delta" && obj.delta) {
+                fullText += obj.delta;
+                botDiv.textContent = fullText;
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+
+                // TTS：边出字边喂
+                if (ttsEnabled) ttsFeedDelta(obj.delta);
+              } else if (obj.type === "error") {
+                botDiv.textContent = `模型调用错误：${obj.error}`;
+              }
+            }
+          }
+
+          if (fullText.trim()) {
+            chatHistory.push({ role: "assistant", content: fullText });
+          } else {
+            const fallback =
+              "我这次没有生成出有效回复。你可以换一种说法再问一次。";
+            botDiv.textContent = fallback;
+            chatHistory.push({ role: "assistant", content: fallback });
+            fullText = fallback;
+          }
+
+          // 收尾：把尾巴 flush + commit
+          if (ttsEnabled) {
+            ttsFlushNow();
+          }
+        } catch (e) {
+          botDiv.textContent =
+            e.name === "AbortError"
+              ? "请求超时：后端在 120 秒内未完成响应。"
+              : "请求异常：" + e.message;
+        } finally {
+          clearTimeout(timeoutId);
+          controller.abort();
+        }
+      }
+
+      // =========================
+      // 音频评分
+      // =========================
+      async function startScoring() {
+        const fileInput = document.getElementById("audioFile");
+        const voiceType = document.getElementById("voiceType").value;
+        const file = fileInput.files[0];
+        if (!file) {
+          alert("请先选择一个音频文件");
           return;
         }
 
-        const reader = resp.body.getReader();
-        const decoder = new TextDecoder('utf-8');
-        let buffer = '';
-        let fullText = '';
+        const modal = document.getElementById("audioScoringModal");
+        if (modal && !modal.classList.contains("active"))
+          modal.classList.add("active");
 
-        const suggestionBotDiv = createStreamingBotMessage();
+        emotionTotals = null;
+        emotionFrameCount = 0;
+        showLoadingScoring();
 
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          const base64Audio = arrayBufferToBase64(arrayBuffer);
+          const audioFormat = guessAudioFormatFromFile(file);
+          const scoringResult = await sendAudioForScoring(
+            base64Audio,
+            voiceType,
+            audioFormat,
+          );
+          displayScoringResults(scoringResult);
+        } catch (error) {
+          console.error("音频评分失败:", error);
+          showError("音频评分失败: " + error.message);
+        }
+      }
 
-          buffer += decoder.decode(value, { stream: true });
-          const { events, rest } = extractSseEvents(buffer);
-          buffer = rest;
+      function showLoadingScoring(resultsId = "scoringResults") {
+        const resultsDiv = document.getElementById(resultsId);
+        if (!resultsDiv) return;
+        let loadingDiv = resultsDiv.querySelector(".loading");
+        if (!loadingDiv) {
+          loadingDiv = document.createElement("div");
+          loadingDiv.className = "loading";
+          loadingDiv.innerHTML = `<p>正在分析音频...</p><p>请稍候...</p>`;
+          resultsDiv.insertBefore(loadingDiv, resultsDiv.firstChild);
+        }
+        resultsDiv.style.display = "block";
+      }
 
-          for (const dataStr of events) {
-            let obj = null;
-            try { obj = JSON.parse(dataStr); } catch (_) {}
-            if (!obj) continue;
+      async function sendAudioForScoring(
+        audioData,
+        voiceType,
+        audioFormat = "wav",
+      ) {
+        const response = await fetch(`${API_BASE}/api/audio/score`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            audio_data: audioData,
+            voice_type: voiceType,
+            audio_format: audioFormat,
+          }),
+        });
 
-            if (obj.type === 'delta' && obj.delta) {
-              fullText += obj.delta;
-              suggestionBotDiv.textContent = fullText;
-              chatMessages.scrollTop = chatMessages.scrollHeight;
-            } else if (obj.type === 'error') {
-              suggestionBotDiv.textContent = `生成建议错误：${obj.error}`;
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || "音频评分失败");
+        }
+
+        const result = await response.json();
+
+        if (!result.success) {
+          throw new Error(result.message || "音频评分失败");
+        }
+
+        const scoringResult = {
+          overall: result.overall,
+          scores: result.scores,
+        };
+
+        return scoringResult;
+      }
+
+      function displayScoringResultsTo(result, ids) {
+        const resultsDiv = document.getElementById(ids.resultsId);
+        const overallScore = document.getElementById(ids.overallId);
+        const techniqueScores = document.getElementById(ids.techniqueId);
+
+        const loadingDiv = resultsDiv?.querySelector(".loading");
+        if (loadingDiv) loadingDiv.remove();
+
+        if (overallScore)
+          overallScore.textContent = Number(result.overall).toFixed(1);
+
+        if (techniqueScores) {
+          renderKidTechniqueBlocks(result.scores || [], ids.techniqueId);
+        }
+
+        if (resultsDiv) resultsDiv.style.display = "block";
+        if (ids.emotionRainbowId) renderEmotionRainbow(ids.emotionRainbowId);
+        renderEmotionPieChart(ids.emotionContainerId, ids.emotionCanvasId);
+
+        let scoreDetails = `🎤 音频评分结果\n总体评分: ${Number(result.overall).toFixed(1)}\n\n`;
+        scoreDetails += `各项评分：\n`;
+        (result.scores || [])
+          .filter((x) => ["open", "clean", "resonate"].includes(x.technique))
+          .forEach((item) => {
+            const displayName = TECH_NAME_MAP[item.technique] || item.technique;
+            scoreDetails += `• ${displayName}: ${item.score}分\n`;
+          });
+        addMessage(scoreDetails, "bot");
+
+        sendScoringToLLM(result);
+      }
+
+      function displayScoringResults(result) {
+        displayScoringResultsTo(result, {
+          resultsId: "scoringResults",
+          overallId: "overallScore",
+          techniqueId: "techniqueScores",
+          chartBarsId: "chartBars",
+          emotionRainbowId: "emotionRainbow",
+          emotionContainerId: "emotionPieContainer",
+          emotionCanvasId: "emotionPieChart",
+        });
+      }
+
+      async function sendScoringToLLM(result) {
+        let promptText = `我刚刚完成了一次音频评分，总体评分是${Number(result.overall).toFixed(1)}分。\n\n`;
+        promptText += `各项评分详情：\n`;
+        (result.scores || [])
+          .filter((x) => ["open", "clean", "resonate"].includes(x.technique))
+          .forEach((item) => {
+            const displayName = TECH_NAME_MAP[item.technique] || item.technique;
+            promptText += `• ${displayName}: ${item.score}分\n`;
+          });
+        const emotionLine = formatEmotionForPrompt(0.2);
+        if (emotionLine) {
+          promptText += `\n\n${emotionLine}（仅包含占比20%以上的情感）\n`;
+        }
+        promptText += `\n根据我的评分，请给出具体的改进建议，帮助我提升发音和表达水平。1分是最高分，5分是最低分`;
+
+        addMessage("正在根据评分生成建议...", "bot");
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60000);
+
+        try {
+          const resp = await fetch(`${CHAT_API_URL}/api/chat/stream`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: "qwen-plus",
+              messages: [{ role: "user", content: withScoreRule(promptText) }],
+            }),
+            signal: controller.signal,
+          });
+
+          clearTimeout(timeoutId);
+
+          if (!resp.ok || !resp.body) {
+            const lastBotMsg = chatMessages.lastElementChild;
+            if (lastBotMsg?.textContent === "正在根据评分生成建议...") {
+              lastBotMsg.textContent = "生成建议失败";
+            }
+            return;
+          }
+
+          const reader = resp.body.getReader();
+          const decoder = new TextDecoder("utf-8");
+          let buffer = "";
+          let fullText = "";
+
+          const suggestionBotDiv = createStreamingBotMessage();
+
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const { events, rest } = extractSseEvents(buffer);
+            buffer = rest;
+
+            for (const dataStr of events) {
+              let obj = null;
+              try {
+                obj = JSON.parse(dataStr);
+              } catch (_) {}
+              if (!obj) continue;
+
+              if (obj.type === "delta" && obj.delta) {
+                fullText += obj.delta;
+                suggestionBotDiv.textContent = fullText;
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+              } else if (obj.type === "error") {
+                suggestionBotDiv.textContent = `生成建议错误：${obj.error}`;
+              }
             }
           }
+
+          if (fullText.trim()) {
+            chatHistory.push({ role: "assistant", content: fullText });
+          } else {
+            suggestionBotDiv.textContent = "抱歉，我这次没有生成出有效建议。";
+          }
+        } catch (e) {
+          const lastBotMsg = chatMessages.lastElementChild;
+          if (lastBotMsg?.textContent === "正在根据评分生成建议...") {
+            lastBotMsg.textContent =
+              e.name === "AbortError"
+                ? "生成建议超时，请稍后重试。"
+                : "生成建议失败：" + e.message;
+          }
+        } finally {
+          clearTimeout(timeoutId);
+          controller.abort();
         }
-
-        if (fullText.trim()) {
-          chatHistory.push({ role: 'assistant', content: fullText });
-        } else {
-          suggestionBotDiv.textContent = '抱歉，我这次没有生成出有效建议。';
-        }
-
-      } catch (e) {
-        const lastBotMsg = chatMessages.lastElementChild;
-        if (lastBotMsg?.textContent === '正在根据评分生成建议...') {
-          lastBotMsg.textContent = (e.name === 'AbortError')
-            ? '生成建议超时，请稍后重试。'
-            : '生成建议失败：' + e.message;
-        }
-      } finally {
-        clearTimeout(timeoutId);
-        controller.abort();
-      }
-    }
-
-    function drawScoreChart(result, chartBarsId = 'chartBars') {
-      const chartBars = document.getElementById(chartBarsId);
-      if (!chartBars) return;
-
-      const scores = result.scores || [];
-      if (scores.length === 0) {
-        chartBars.innerHTML = '<p style="color:#999;">暂无评分数据</p>';
-        return;
       }
 
-      chartBars.innerHTML = '';
-      scores.forEach(item => {
-        const barHeight = (item.score / 5) * 160;
-        const displayName = TECH_NAME_MAP[item.technique] || item.technique;
-        const barItem = document.createElement('div');
-        barItem.className = 'chart-bar-item';
-        barItem.innerHTML = `
+      function drawScoreChart(result, chartBarsId = "chartBars") {
+        const chartBars = document.getElementById(chartBarsId);
+        if (!chartBars) return;
+
+        const scores = result.scores || [];
+        if (scores.length === 0) {
+          chartBars.innerHTML = '<p style="color:#999;">暂无评分数据</p>';
+          return;
+        }
+
+        chartBars.innerHTML = "";
+        scores.forEach((item) => {
+          const barHeight = (item.score / 5) * 160;
+          const displayName = TECH_NAME_MAP[item.technique] || item.technique;
+          const barItem = document.createElement("div");
+          barItem.className = "chart-bar-item";
+          barItem.innerHTML = `
           <span class="chart-bar-value">${item.score}</span>
           <div class="chart-bar" style="height:${barHeight}px;"></div>
           <span class="chart-bar-label" title="${displayName}">${displayName}</span>
         `;
-        chartBars.appendChild(barItem);
-      });
-    }
+          chartBars.appendChild(barItem);
+        });
+      }
 
-    function showError(message, resultsId = 'scoringResults') {
-      const resultsDiv = document.getElementById(resultsId);
-      if (!resultsDiv) return;
-      resultsDiv.innerHTML = `<div class="error"><p>${message}</p></div>`;
-      resultsDiv.style.display = 'block';
-    }
+      function showError(message, resultsId = "scoringResults") {
+        const resultsDiv = document.getElementById(resultsId);
+        if (!resultsDiv) return;
+        resultsDiv.innerHTML = `<div class="error"><p>${message}</p></div>`;
+        resultsDiv.style.display = "block";
+      }
 
-    async function preflightMediaPermissions() {
-      if (!navigator.permissions?.query) return;
-      try {
-        await navigator.permissions.query({ name: 'microphone' });
-      } catch (_) {}
-      try {
-        await navigator.permissions.query({ name: 'camera' });
-      } catch (_) {}
-    }
+      async function preflightMediaPermissions() {
+        if (!navigator.permissions?.query) return;
+        try {
+          await navigator.permissions.query({ name: "microphone" });
+        } catch (_) {}
+        try {
+          await navigator.permissions.query({ name: "camera" });
+        } catch (_) {}
+      }
 
-    // =========================
-    // 初始化
-    // =========================
-    window.addEventListener('load', () => {
-      (async () => {
-        await preflightMediaPermissions();
-      })();
-      voiceButton.addEventListener('click', toggleRecording);
+      // =========================
+      // 初始化
+      // =========================
+      window.addEventListener("load", () => {
+        (async () => {
+          await preflightMediaPermissions();
+        })();
+        voiceButton.addEventListener("click", toggleRecording);
 
-      ttsToggleBtn.addEventListener('click', async () => {
-        ttsEnabled = !ttsEnabled;
+        ttsToggleBtn.addEventListener("click", async () => {
+          ttsEnabled = !ttsEnabled;
 
-        if (ttsEnabled) {
-          ttsToggleBtn.textContent = '🔊';
-          try {
-            await connectTts();
-            startTtsFlushTimer();
-          } catch (e) {
-            console.error(e);
+          if (ttsEnabled) {
+            ttsToggleBtn.textContent = "🔊";
+            try {
+              await connectTts();
+              startTtsFlushTimer();
+            } catch (e) {
+              console.error(e);
+            }
+          } else {
+            ttsToggleBtn.textContent = "🔇";
+            closeTts();
           }
-        } else {
-          ttsToggleBtn.textContent = '🔇';
-          closeTts();
+        });
+
+        window.addEventListener("beforeunload", () => {
+          try {
+            closeTts();
+          } catch (_) {}
+        });
+      });
+
+      document.addEventListener("DOMContentLoaded", () => {
+        const audioFileElement = document.getElementById("audioFile");
+        if (audioFileElement) {
+          audioFileElement.addEventListener("change", (e) => {
+            const file = e.target.files[0];
+            if (file) {
+              const label = document.querySelector(".file-label");
+              if (label) label.textContent = `📁 ${file.name}`;
+            }
+          });
+        }
+
+        const audioScoringModal = document.getElementById("audioScoringModal");
+        if (audioScoringModal) {
+          audioScoringModal.addEventListener("click", (e) => {
+            if (e.target === audioScoringModal) closeAudioScoringModal();
+          });
+        }
+
+        const scoreVoiceModal = document.getElementById("scoreVoiceModal");
+        if (scoreVoiceModal) {
+          scoreVoiceModal.addEventListener("click", (e) => {
+            if (e.target === scoreVoiceModal) closeScoreVoiceModal();
+          });
         }
       });
-
-      window.addEventListener('beforeunload', () => {
-        try { closeTts(); } catch (_) {}
-      });
-    });
-
-    document.addEventListener('DOMContentLoaded', () => {
-      const audioFileElement = document.getElementById('audioFile');
-      if (audioFileElement) {
-        audioFileElement.addEventListener('change', (e) => {
-          const file = e.target.files[0];
-          if (file) {
-            const label = document.querySelector('.file-label');
-            if (label) label.textContent = `📁 ${file.name}`;
-          }
-        });
-      }
-
-      const audioScoringModal = document.getElementById('audioScoringModal');
-      if (audioScoringModal) {
-        audioScoringModal.addEventListener('click', (e) => {
-          if (e.target === audioScoringModal) closeAudioScoringModal();
-        });
-      }
-
-      const scoreVoiceModal = document.getElementById('scoreVoiceModal');
-      if (scoreVoiceModal) {
-        scoreVoiceModal.addEventListener('click', (e) => {
-          if (e.target === scoreVoiceModal) closeScoreVoiceModal();
-        });
-      }
-    });
-  </script>
-</body>
+    </script>
+  </body>
 </html>
