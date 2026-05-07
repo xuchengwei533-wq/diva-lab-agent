@@ -47,7 +47,7 @@ class ASRResponse(BaseModel):
 
 class TTSRequest(BaseModel):
     text: str = Field(..., min_length=1)
-    voice_type: Optional[str] = "cute"
+    voice_type: Optional[str] = "deep_male"
 
 class TTSResponse(BaseModel):
     success: bool

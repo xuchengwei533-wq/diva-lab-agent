@@ -7,9 +7,10 @@ from websocket import WebSocketTimeoutException, create_connection
 
 WS_URL = (
     "ws://127.0.0.1:8004/ws/tts"
-    "?voice=Vincent&model=qwen3-tts-flash&language_type=Chinese"
+    "?voice=Ethan&model=qwen3-tts-flash&language_type=Chinese"
 )
 TEST_TEXT = "你好，今天我们来练习唱歌。请保持放松。"
+ALLOWED_MALE_VOICES = {"Ethan", "Eldric Sage", "Ryan", "Aiden", "Vincent", "Neil", "Andre"}
 
 
 def print_message(prefix: str, payload):
@@ -20,6 +21,7 @@ def main() -> int:
     delta_count = 0
     saw_url = False
     saw_base64 = False
+    seen_audio_voices = []
     errors = []
     seen_types = []
     ws = None
@@ -53,6 +55,9 @@ def main() -> int:
 
             if mtype == "response.audio.delta":
                 delta_count += 1
+                voice = msg.get("voice")
+                if voice:
+                    seen_audio_voices.append(voice)
                 if delta_count <= 3:
                     print_message(
                         "delta_meta",
@@ -68,6 +73,9 @@ def main() -> int:
                     )
             elif mtype == "response.audio.url":
                 saw_url = True
+                voice = msg.get("voice")
+                if voice:
+                    seen_audio_voices.append(voice)
                 print_message(
                     "fallback_url",
                     {
@@ -80,6 +88,9 @@ def main() -> int:
                 )
             elif mtype == "response.audio.base64":
                 saw_base64 = True
+                voice = msg.get("voice")
+                if voice:
+                    seen_audio_voices.append(voice)
                 print_message(
                     "fallback_base64",
                     {
@@ -107,15 +118,26 @@ def main() -> int:
             "delta_count": delta_count,
             "saw_url": saw_url,
             "saw_base64": saw_base64,
+            "seen_audio_voices": seen_audio_voices,
             "error_count": len(errors),
             "seen_types": seen_types,
         }
         print_message("summary", summary)
 
         if delta_count >= 2:
+            invalid_voices = [v for v in seen_audio_voices if v not in ALLOWED_MALE_VOICES]
+            if invalid_voices:
+                print_message("invalid_voices", {"voices": invalid_voices})
+                print("VERDICT: 流式已生效，但默认音色不是目标男声")
+                return 3
             print("VERDICT: 真正流式 TTS（收到至少 2 个 response.audio.delta）")
             return 0
         if saw_url or saw_base64:
+            invalid_voices = [v for v in seen_audio_voices if v not in ALLOWED_MALE_VOICES]
+            if invalid_voices:
+                print_message("invalid_voices", {"voices": invalid_voices})
+                print("VERDICT: 非流式 fallback，且音色不是目标男声")
+                return 3
             print("VERDICT: 非流式 fallback（收到 response.audio.url 或 response.audio.base64）")
             if errors:
                 print_message("fallback_reason", {"attempts": errors[-1].get("attempts") or []})

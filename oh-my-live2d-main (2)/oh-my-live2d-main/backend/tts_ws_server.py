@@ -47,7 +47,7 @@ dashscope.base_http_api_url = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope
 DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY")
 
 DEFAULT_MODEL = os.getenv("DASHSCOPE_TTS_MODEL", "qwen3-tts-flash")
-DEFAULT_VOICE = os.getenv("DASHSCOPE_TTS_VOICE", "Vincent")
+DEFAULT_VOICE = os.getenv("DASHSCOPE_TTS_VOICE", "Ethan")
 DEFAULT_LANG = os.getenv("DASHSCOPE_TTS_LANG", "Chinese")
 MIN_CHARS_PER_REQ = int(os.getenv("TTS_MIN_CHARS_PER_REQ", "24"))
 MAX_CHARS_PER_REQ = int(os.getenv("TTS_MAX_CHARS_PER_REQ", "300"))
@@ -66,30 +66,33 @@ app.add_middleware(
 )
 
 VOICE_TYPE_TO_VOICE = {
-    "cute": "Cherry",
-    "female": "Cherry",
-    "lively": "Serena",
-    "gentle": "Chelsie",
-    "calm": "Ethan",
+    "default": "Ethan",
     "male": "Ethan",
-    "deep_male": "Vincent",
+    "deep_male": "Ethan",
     "mature_male": "Andre",
     "elder_male": "Eldric Sage",
     "news_male": "Neil",
-    "fast": "Cherry",
-    "slow": "Chelsie",
-    "mao": "Cherry",
+    "calm": "Ethan",
+    # Backward compatibility: all legacy aliases still resolve to male voices.
+    "cute": "Ethan",
+    "fast": "Ethan",
+    "slow": "Ethan",
+    "mao": "Ethan",
+    "female": "Ethan",
+    "female_cute": "Ethan",
+    "female_lively": "Neil",
+    "female_gentle": "Ethan",
 }
 
 SUPPORTED_VOICES = [
-    "Cherry",
-    "Serena",
     "Ethan",
-    "Chelsie",
-    "Vincent",
-    "Andre",
     "Eldric Sage",
+    "Ryan",
+    "Aiden",
     "Neil",
+    "Andre",
+    "Vincent",
+    "Moon",
 ]
 
 _probe_cache: Dict[str, Dict[str, Any]] = {}
@@ -127,6 +130,17 @@ def _text_bucket(text: str) -> str:
 
 def _normalize_text(text: str) -> str:
     return (text or "").strip()
+
+
+def normalize_voice(voice: Optional[str]) -> str:
+    if not voice:
+        return DEFAULT_VOICE
+    value = voice.strip()
+    if not value:
+        return DEFAULT_VOICE
+    if value in ("Cherry", "Serena", "Chelsie", "cute", "mao"):
+        return DEFAULT_VOICE
+    return value
 
 
 def _split_text_for_tts(text: str) -> List[str]:
@@ -734,8 +748,8 @@ async def speak(req: TTSSpeakRequest) -> Dict[str, Any]:
     if not text:
         return JSONResponse(status_code=400, content={"type": "error", "error": "Empty text"})
 
-    voice_type = (req.voice_type or "").strip().lower() or "deep_male"
-    preferred_voice = VOICE_TYPE_TO_VOICE.get(voice_type) or (req.voice_type or DEFAULT_VOICE)
+    voice_type = (req.voice_type or "deep_male").strip().lower()
+    preferred_voice = VOICE_TYPE_TO_VOICE.get(voice_type) or normalize_voice(req.voice_type or DEFAULT_VOICE)
 
     try:
         meta, attempts = await synthesize_with_candidates(text, preferred_voice=preferred_voice)
@@ -779,7 +793,7 @@ async def ws_tts(ws: WebSocket):
 
     qp = ws.query_params
     model = qp.get("model") or DEFAULT_MODEL
-    voice = qp.get("voice") or DEFAULT_VOICE
+    voice = normalize_voice(qp.get("voice") or DEFAULT_VOICE)
     language_type = qp.get("language_type") or DEFAULT_LANG
     state = SessionState()
 

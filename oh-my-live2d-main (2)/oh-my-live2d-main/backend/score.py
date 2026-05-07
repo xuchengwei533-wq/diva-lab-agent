@@ -138,11 +138,31 @@ class AudioScoringRequest(BaseModel):
     audio_format: str = Field(default="wav", description="Audio container/extension, e.g. wav/mp3/webm")
 
 
+def _resolve_weight_path(*relative_paths: str) -> str:
+    for rel in relative_paths:
+        candidate = os.path.join(project_root, rel)
+        if os.path.exists(candidate):
+            return candidate
+    return os.path.join(project_root, relative_paths[0])
+
+
 DEFAULT_WEIGHTS = {
-    "女高音 Soprano": os.path.join(project_root, "dist", "VoiceScorer", "_internal", "MODEL_WEIGHT", "logs_ddnet_sopran", "2025-08-28_17-36-59", "best_model.pth"),
-    "女中音 Mezzo": os.path.join(project_root, "dist", "VoiceScorer", "_internal", "MODEL_WEIGHT", "logs_ddnet_mezzo", "2025-08-28_19-06-05", "best_model.pth"),
-    "男高音 Tenor": os.path.join(project_root, "dist", "VoiceScorer", "_internal", "MODEL_WEIGHT", "logs_ddnet_tenor", "2025-08-28_19-45-18", "best_model.pth"),
-    "男中音 Baritone": os.path.join(project_root, "dist", "VoiceScorer", "_internal", "MODEL_WEIGHT", "logs_ddnet_baritone", "2025-07-29_12-04-20", "best_model.pth"),
+    "女高音 Soprano": _resolve_weight_path(
+        os.path.join("MODEL_WEIGHT_20260119", "logs_ddnet_sopran", "2026-01-08_19-51-04", "best_model.pth"),
+        os.path.join("dist", "VoiceScorer", "_internal", "MODEL_WEIGHT", "logs_ddnet_sopran", "2025-08-28_17-36-59", "best_model.pth"),
+    ),
+    "女中音 Mezzo": _resolve_weight_path(
+        os.path.join("MODEL_WEIGHT_20260119", "logs_ddnet_mezzo", "2026-01-08_21-27-58", "best_model.pth"),
+        os.path.join("dist", "VoiceScorer", "_internal", "MODEL_WEIGHT", "logs_ddnet_mezzo", "2025-08-28_19-06-05", "best_model.pth"),
+    ),
+    "男高音 Tenor": _resolve_weight_path(
+        os.path.join("MODEL_WEIGHT_20260119", "logs_ddnet_tenor", "2026-01-09_12-05-26", "best_model.pth"),
+        os.path.join("dist", "VoiceScorer", "_internal", "MODEL_WEIGHT", "logs_ddnet_tenor", "2025-08-28_19-45-18", "best_model.pth"),
+    ),
+    "男中音 Baritone": _resolve_weight_path(
+        os.path.join("MODEL_WEIGHT_20260119", "logs_ddnet_baritone", "2026-01-08_22-00-17", "best_model.pth"),
+        os.path.join("dist", "VoiceScorer", "_internal", "MODEL_WEIGHT", "logs_ddnet_baritone", "2025-07-29_12-04-20", "best_model.pth"),
+    ),
 }
 
 VOICE_TYPE_ALIASES = {
