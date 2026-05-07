@@ -274,6 +274,10 @@ class TTSAllFailedError(RuntimeError):
         }
 
 
+async def _ws_send_json(ws: WebSocket, payload: Dict[str, Any]) -> None:
+    await ws.send_text(json.dumps(payload, ensure_ascii=False))
+
+
 def _extract_audio_meta(resp: Any, candidate: Dict[str, Any]) -> Dict[str, Any]:
     out = _safe_get(resp, "output", default=None)
     audio = _safe_get(out, "audio", default=None)
@@ -413,6 +417,17 @@ async def _call_tts_candidate(text: str, candidate: Dict[str, Any]) -> Tuple[Opt
     )
 
 
+def _cache_candidate_success(bucket: str, candidate: Dict[str, Any], attempts: List[Dict[str, Any]]) -> None:
+    with _probe_lock:
+        _probe_cache[bucket] = {
+            "provider": candidate["provider"],
+            "model": candidate["model"],
+            "voice": candidate["voice"],
+            "language_type": candidate["language_type"],
+        }
+        _probe_attempts[bucket] = attempts[:]
+
+
 def _prioritize_candidates(preferred_voice: Optional[str], bucket: str) -> List[Dict[str, Any]]:
     cached: Optional[Dict[str, Any]]
     with _probe_lock:
@@ -441,14 +456,7 @@ async def _probe_bucket(bucket: str, preferred_voice: Optional[str] = None) -> T
         meta, attempt = await _call_tts_candidate(probe_text, candidate)
         attempts.append(attempt)
         if meta:
-            with _probe_lock:
-                _probe_cache[bucket] = {
-                    "provider": candidate["provider"],
-                    "model": candidate["model"],
-                    "voice": candidate["voice"],
-                    "language_type": candidate["language_type"],
-                }
-                _probe_attempts[bucket] = attempts[:]
+            _cache_candidate_success(bucket, candidate, attempts)
             return meta, attempts
     with _probe_lock:
         _probe_attempts[bucket] = attempts[:]
@@ -474,17 +482,227 @@ async def synthesize_with_candidates(
         meta, attempt = await _call_tts_candidate(text, candidate)
         attempts.append(attempt)
         if meta:
-            with _probe_lock:
-                _probe_cache[bucket] = {
-                    "provider": candidate["provider"],
-                    "model": candidate["model"],
-                    "voice": candidate["voice"],
-                    "language_type": candidate["language_type"],
-                }
-                _probe_attempts[bucket] = attempts[:]
+            _cache_candidate_success(bucket, candidate, attempts)
             return meta, attempts
 
     raise TTSAllFailedError("All TTS providers failed", attempts)
+
+
+def _guess_stream_audio_format(resp: Any, candidate: Dict[str, Any]) -> str:
+    fmt = _safe_get(resp, "output", "audio", "format")
+    if fmt:
+        return str(fmt)
+    provider = str(candidate.get("provider") or "").strip()
+    if provider in ("multimodal", "qwen_tts"):
+        return PCM_FORMAT
+    return "wav"
+
+
+def _guess_stream_sample_rate(resp: Any) -> int:
+    for key in ("sample_rate", "sampleRate", "sampling_rate", "samplingRate"):
+        value = _safe_get(resp, "output", "audio", key)
+        if value is None:
+            continue
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            pass
+    return PCM_SAMPLE_RATE
+
+
+async def _iter_dashscope_stream(callable_obj):
+    stream_or_resp = await asyncio.to_thread(callable_obj)
+    if hasattr(stream_or_resp, "__iter__") and not isinstance(stream_or_resp, (dict, str, bytes)):
+        iterator = iter(stream_or_resp)
+        sentinel = object()
+
+        def _next_item():
+            return next(iterator, sentinel)
+
+        while True:
+            item = await asyncio.to_thread(_next_item)
+            if item is sentinel:
+                break
+            yield item
+    else:
+        yield stream_or_resp
+
+
+def _run_streaming_call(candidate: Dict[str, Any], text: str):
+    provider = str(candidate.get("provider") or "").strip()
+    model = str(candidate["model"])
+    voice = str(candidate["voice"])
+    if provider == "multimodal":
+        return dashscope.MultiModalConversation.call(
+            api_key=DASHSCOPE_API_KEY,
+            model=model,
+            text=text,
+            voice=voice,
+            language_type=str(candidate["language_type"]),
+            stream=True,
+            format=PCM_FORMAT,
+            sample_rate=PCM_SAMPLE_RATE,
+        )
+    if provider == "qwen_tts":
+        return SpeechSynthesizer.call(
+            model=model,
+            text=text,
+            api_key=DASHSCOPE_API_KEY,
+            voice=voice,
+            stream=True,
+            format=PCM_FORMAT,
+            sample_rate=PCM_SAMPLE_RATE,
+        )
+    raise RuntimeError(f"Unsupported provider: {provider}")
+
+
+async def stream_tts_with_candidates(
+    text: str,
+    preferred_voice: Optional[str],
+    ws: WebSocket,
+    *,
+    run_probe: bool = True,
+) -> Dict[str, Any]:
+    bucket = _text_bucket(text)
+    attempts: List[Dict[str, Any]] = []
+
+    if run_probe:
+        with _probe_lock:
+            has_cache = bucket in _probe_cache
+        if not has_cache:
+            await _probe_bucket(bucket, preferred_voice=preferred_voice)
+
+    for candidate in _prioritize_candidates(preferred_voice, bucket):
+        got_audio = False
+        attempt_recorded = False
+        last_attempt = _build_attempt(candidate)
+        try:
+            async for resp in _iter_dashscope_stream(lambda: _run_streaming_call(candidate, text)):
+                status_code = _safe_get(resp, "status_code")
+                code = _safe_get(resp, "code")
+                message = _safe_get(resp, "message")
+                request_id = _safe_get(resp, "request_id")
+                last_attempt = _build_attempt(
+                    candidate,
+                    status_code=int(status_code) if status_code is not None else None,
+                    dashscope_code=str(code) if code else None,
+                    dashscope_message=str(message or "ok"),
+                    request_id=str(request_id) if request_id else None,
+                )
+
+                if status_code not in (None, HTTPStatus.OK, 200):
+                    attempts.append(last_attempt)
+                    attempt_recorded = True
+                    if got_audio:
+                        await _ws_send_json(
+                            ws,
+                            {
+                                **_ws_error_payload(TTSAllFailedError("Streaming TTS interrupted after audio started", attempts)),
+                                "provider": candidate.get("provider"),
+                                "model": candidate.get("model"),
+                                "voice": candidate.get("voice"),
+                                "language_type": candidate.get("language_type"),
+                            },
+                        )
+                        return {"mode": "stream", "attempts": attempts, "interrupted": True}
+                    break
+
+                audio_data = _safe_get(resp, "output", "audio", "data")
+                if audio_data:
+                    got_audio = True
+                    await _ws_send_json(
+                        ws,
+                        {
+                            "type": "response.audio.delta",
+                            "delta": str(audio_data),
+                            "format": _guess_stream_audio_format(resp, candidate),
+                            "sample_rate": _guess_stream_sample_rate(resp),
+                            "provider": candidate["provider"],
+                            "model": candidate["model"],
+                            "voice": candidate["voice"],
+                            "language_type": candidate["language_type"],
+                        },
+                    )
+
+            if got_audio:
+                if last_attempt.get("status_code") is None:
+                    last_attempt["status_code"] = 200
+                if not attempt_recorded:
+                    attempts.append(last_attempt)
+                _cache_candidate_success(bucket, candidate, attempts)
+                return {"mode": "stream", "attempts": attempts, "interrupted": False}
+            if not attempt_recorded and last_attempt.get("dashscope_message") in (None, "ok"):
+                last_attempt["dashscope_message"] = "DashScope streaming finished without audio chunks"
+            if not attempt_recorded:
+                attempts.append(last_attempt)
+        except Exception as e:
+            attempt = _build_attempt(
+                candidate,
+                status_code=getattr(e, "status_code", None),
+                dashscope_code=str(getattr(e, "code", "") or "") or None,
+                dashscope_message=str(getattr(e, "message", "") or str(e)),
+                request_id=str(getattr(e, "request_id", "") or "") or None,
+            )
+            attempts.append(attempt)
+            if got_audio:
+                await _ws_send_json(
+                    ws,
+                    {
+                        **_ws_error_payload(TTSAllFailedError("Streaming TTS interrupted after audio started", attempts)),
+                        "provider": candidate.get("provider"),
+                        "model": candidate.get("model"),
+                        "voice": candidate.get("voice"),
+                        "language_type": candidate.get("language_type"),
+                    },
+                )
+                return {"mode": "stream", "attempts": attempts, "interrupted": True}
+
+    raise TTSAllFailedError("All streaming TTS providers failed", attempts)
+
+
+async def _send_ws_fallback_audio(meta: Dict[str, Any], ws: WebSocket) -> None:
+    if meta.get("audio_base64"):
+        await _ws_send_json(
+            ws,
+            {
+                "type": "response.audio.base64",
+                "audio_base64": meta["audio_base64"],
+                "format": meta["format"],
+                "provider": meta["provider"],
+                "model": meta["model"],
+                "voice": meta["voice"],
+                "language_type": meta["language_type"],
+            },
+        )
+        return
+    if meta.get("audio_url"):
+        await _ws_send_json(
+            ws,
+            {
+                "type": "response.audio.url",
+                "url": meta["audio_url"],
+                "format": meta["format"],
+                "provider": meta["provider"],
+                "model": meta["model"],
+                "voice": meta["voice"],
+                "language_type": meta["language_type"],
+            },
+        )
+        return
+    raise TTSAllFailedError(
+        "All TTS providers failed",
+        [
+            _build_attempt(
+                {
+                    "provider": meta.get("provider"),
+                    "model": meta.get("model"),
+                    "voice": meta.get("voice"),
+                    "language_type": meta.get("language_type"),
+                },
+                dashscope_message="TTS succeeded but returned no playable audio",
+            )
+        ],
+    )
 
 
 @app.post("/api/tts/speak")
@@ -576,63 +794,30 @@ async def ws_tts(ws: WebSocket):
                 text = _normalize_text(state.text_buf)
                 state.text_buf = ""
                 if not text:
-                    await ws.send_text(json.dumps({"type": "error", "error": "Empty text buffer on commit"}, ensure_ascii=False))
+                    await _ws_send_json(ws, {"type": "error", "error": "Empty text buffer on commit"})
                     continue
 
-                try:
-                    parts = _split_text_for_tts(text)
-                    for seg in parts:
-                        meta, _attempts = await synthesize_with_candidates(seg, preferred_voice=voice)
-                        if meta.get("audio_base64"):
-                            await ws.send_text(
-                                json.dumps(
-                                    {
-                                        "type": "response.audio.base64",
-                                        "audio_base64": meta["audio_base64"],
-                                        "format": meta["format"],
-                                        "provider": meta["provider"],
-                                        "model": meta["model"],
-                                        "voice": meta["voice"],
-                                        "language_type": meta["language_type"],
-                                    },
-                                    ensure_ascii=False,
-                                )
+                parts = _split_text_for_tts(text)
+                fatal_error = False
+                for seg in parts:
+                    try:
+                        await stream_tts_with_candidates(seg, preferred_voice=voice, ws=ws)
+                    except TTSAllFailedError as stream_error:
+                        try:
+                            meta, fallback_attempts = await synthesize_with_candidates(seg, preferred_voice=voice)
+                            await _send_ws_fallback_audio(meta, ws)
+                        except TTSAllFailedError as fallback_error:
+                            combined_error = TTSAllFailedError(
+                                "All streaming and fallback TTS providers failed",
+                                stream_error.attempts + fallback_error.attempts,
                             )
-                        elif meta.get("audio_url"):
-                            await ws.send_text(
-                                json.dumps(
-                                    {
-                                        "type": "response.audio.url",
-                                        "url": meta["audio_url"],
-                                        "format": meta["format"],
-                                        "provider": meta["provider"],
-                                        "model": meta["model"],
-                                        "voice": meta["voice"],
-                                        "language_type": meta["language_type"],
-                                    },
-                                    ensure_ascii=False,
-                                )
-                            )
-                        else:
-                            raise TTSAllFailedError(
-                                "All TTS providers failed",
-                                [
-                                    _build_attempt(
-                                        {
-                                            "provider": meta.get("provider"),
-                                            "model": meta.get("model"),
-                                            "voice": meta.get("voice"),
-                                            "language_type": meta.get("language_type"),
-                                        },
-                                        dashscope_message="TTS succeeded but returned no playable audio",
-                                    )
-                                ],
-                            )
-                        await ws.send_text(json.dumps({"type": "response.segment.done"}, ensure_ascii=False))
+                            await _ws_send_json(ws, _ws_error_payload(combined_error))
+                            fatal_error = True
+                            break
+                    await _ws_send_json(ws, {"type": "response.segment.done"})
 
-                    await ws.send_text(json.dumps({"type": "response.done"}, ensure_ascii=False))
-                except TTSAllFailedError as e:
-                    await ws.send_text(json.dumps(_ws_error_payload(e), ensure_ascii=False))
+                if not fatal_error:
+                    await _ws_send_json(ws, {"type": "response.done"})
                 continue
 
             if mtype == "session.finish":
