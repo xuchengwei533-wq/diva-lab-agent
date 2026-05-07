@@ -4,14 +4,17 @@ import asyncio
 import threading
 import base64
 import urllib.request
-from typing import Any, Dict, Optional
+from http import HTTPStatus
+from typing import Any, Dict, Optional, List, Tuple
 
 import dashscope
+from dashscope.audio.qwen_tts import SpeechSynthesizer
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-# ============= 基础配置 =============
+
 def _load_env_file():
     here = os.path.abspath(os.path.dirname(__file__))
     candidates = [
@@ -41,20 +44,22 @@ def _load_env_file():
 _load_env_file()
 
 dashscope.base_http_api_url = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/api/v1")
-DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY")  # 必须配置
+DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY")
 
 DEFAULT_MODEL = os.getenv("DASHSCOPE_TTS_MODEL", "qwen3-tts-flash")
 DEFAULT_VOICE = os.getenv("DASHSCOPE_TTS_VOICE", "Cherry")
-DEFAULT_LANG  = os.getenv("DASHSCOPE_TTS_LANG", "Chinese")
-
-# 非流式合成：为了避免“提交过短导致效果差/请求频繁”，这里保留最小长度限制
+DEFAULT_LANG = os.getenv("DASHSCOPE_TTS_LANG", "Chinese")
 MIN_CHARS_PER_REQ = int(os.getenv("TTS_MIN_CHARS_PER_REQ", "24"))
+MAX_CHARS_PER_REQ = int(os.getenv("TTS_MAX_CHARS_PER_REQ", "300"))
+PCM_SAMPLE_RATE = int(os.getenv("TTS_PCM_SAMPLE_RATE", "24000"))
+PCM_FORMAT = os.getenv("TTS_PCM_FORMAT", "pcm_s16le")
+CHINESE_PROBE_TEXT = os.getenv("TTS_PROBE_TEXT_ZH", "你好，今天我们来练习唱歌。")
+DEFAULT_PROBE_TEXT = os.getenv("TTS_PROBE_TEXT_DEFAULT", "Hello, today we will practice singing.")
 
 app = FastAPI()
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 演示环境先放开
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -70,10 +75,83 @@ VOICE_TYPE_TO_VOICE = {
     "mao": "Cherry",
 }
 
+_probe_cache: Dict[str, Dict[str, Any]] = {}
+_probe_attempts: Dict[str, List[Dict[str, Any]]] = {}
+_probe_lock = threading.Lock()
+
 
 class TTSSpeakRequest(BaseModel):
     text: str = Field(..., min_length=1)
     voice_type: Optional[str] = Field(default="cute")
+
+
+def _safe_get(obj: Any, *keys: str, default=None):
+    cur = obj
+    for key in keys:
+        if cur is None:
+            return default
+        if isinstance(cur, dict):
+            cur = cur.get(key)
+        else:
+            cur = getattr(cur, key, None)
+    return default if cur is None else cur
+
+
+def _is_chinese_text(text: str) -> bool:
+    for ch in text or "":
+        if "\u4e00" <= ch <= "\u9fff":
+            return True
+    return False
+
+
+def _text_bucket(text: str) -> str:
+    return "zh" if _is_chinese_text(text) else "default"
+
+
+def _normalize_text(text: str) -> str:
+    return (text or "").strip()
+
+
+def _split_text_for_tts(text: str) -> List[str]:
+    text = _normalize_text(text)
+    if not text:
+        return []
+    if len(text) <= MAX_CHARS_PER_REQ:
+        return [text]
+
+    seps = set("。！？!?；;\n")
+    chunks: List[str] = []
+    cur: List[str] = []
+    for ch in text:
+        cur.append(ch)
+        if ch in seps and len(cur) >= MIN_CHARS_PER_REQ:
+            seg = "".join(cur).strip()
+            if seg:
+                chunks.append(seg)
+            cur = []
+        if len(cur) >= MAX_CHARS_PER_REQ:
+            seg = "".join(cur).strip()
+            if seg:
+                chunks.append(seg)
+            cur = []
+    tail = "".join(cur).strip()
+    if tail:
+        chunks.append(tail)
+    return [c for c in chunks if c]
+
+
+def _guess_audio_format(url: Optional[str], audio_data: Optional[str]) -> str:
+    if url:
+        lower = url.lower()
+        if ".mp3" in lower:
+            return "mp3"
+        if ".wav" in lower:
+            return "wav"
+        if ".pcm" in lower:
+            return "pcm_s16le"
+    if audio_data:
+        return "wav"
+    return "wav"
 
 
 def _download_to_base64(url: str) -> str:
@@ -84,189 +162,383 @@ def _download_to_base64(url: str) -> str:
     return base64.b64encode(content).decode("utf-8")
 
 
-@app.post("/api/tts/speak")
-async def speak(req: TTSSpeakRequest) -> Dict[str, Any]:
-    if not DASHSCOPE_API_KEY:
-        raise HTTPException(status_code=500, detail="DASHSCOPE_API_KEY not set in environment")
-
-    text = (req.text or "").strip()
-    if not text:
-        raise HTTPException(status_code=400, detail="Empty text")
-
-    voice_type = (req.voice_type or "").strip().lower() or "cute"
-    voice = VOICE_TYPE_TO_VOICE.get(voice_type) or (req.voice_type or DEFAULT_VOICE)
-
-    resp = await _dashscope_tts_nonstream(text, DEFAULT_MODEL, voice, DEFAULT_LANG)
-    meta = _extract_audio_meta(resp)
-    if meta.get("data"):
-        return {"success": True, "audio_base64": str(meta["data"])}
-    if meta.get("url"):
-        audio_base64 = await asyncio.to_thread(_download_to_base64, str(meta["url"]))
-        return {"success": True, "audio_base64": audio_base64}
-
-    raise HTTPException(status_code=500, detail="TTS returned no audio data/url")
-
-
-def _safe_get(d: Any, *keys, default=None):
-    """兼容 dict / SDK 对象两种结构的安全取值。"""
-    cur = d
-    for k in keys:
-        if cur is None:
-            return default
-        if isinstance(cur, dict):
-            cur = cur.get(k, None)
-        else:
-            cur = getattr(cur, k, None)
-    return default if cur is None else cur
+def _dedupe_candidates(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    seen = set()
+    out: List[Dict[str, Any]] = []
+    for item in items:
+        key = (
+            str(item.get("provider") or "").strip(),
+            str(item.get("model") or "").strip(),
+            str(item.get("voice") or "").strip(),
+            str(item.get("language_type") or "").strip(),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(
+            {
+                "provider": key[0],
+                "model": key[1],
+                "voice": key[2],
+                "language_type": key[3] or DEFAULT_LANG,
+            }
+        )
+    return out
 
 
-def _extract_audio_meta(resp: Any) -> Dict[str, Any]:
-    """
-    从 DashScope response 中提取音频信息：
-    - url / expires_at（最关键，前端用 <audio> 播放）
-    - data（可选：如果 SDK 返回 base64 音频，也一并带回去）
-    """
-    # 常见结构：resp.output.audio.url / resp.output.audio.expires_at
+def _default_tts_candidates() -> List[Dict[str, Any]]:
+    voices = []
+    for v in [DEFAULT_VOICE, "Cherry", "Serena", "Ethan", "Chelsie"]:
+        if v and v not in voices:
+            voices.append(v)
+
+    candidates: List[Dict[str, Any]] = []
+    for voice in voices:
+        for lang in ("Chinese", "Auto"):
+            candidates.append(
+                {
+                    "provider": "qwen_tts",
+                    "model": DEFAULT_MODEL,
+                    "voice": voice,
+                    "language_type": lang,
+                }
+            )
+    for voice in voices:
+        for lang in ("Chinese", "Auto"):
+            candidates.append(
+                {
+                    "provider": "multimodal",
+                    "model": DEFAULT_MODEL,
+                    "voice": voice,
+                    "language_type": lang,
+                }
+            )
+    return _dedupe_candidates(candidates)
+
+
+def _load_tts_candidates() -> List[Dict[str, Any]]:
+    raw = os.getenv("DASHSCOPE_TTS_CANDIDATES")
+    if raw:
+        try:
+            data = json.loads(raw)
+            if isinstance(data, list):
+                cleaned = _dedupe_candidates([x for x in data if isinstance(x, dict)])
+                if cleaned:
+                    return cleaned
+        except Exception:
+            pass
+    return _default_tts_candidates()
+
+
+TTS_CANDIDATES = _load_tts_candidates()
+
+
+def _candidate_matches_voice(candidate: Dict[str, Any], preferred_voice: Optional[str]) -> bool:
+    if not preferred_voice:
+        return False
+    return str(candidate.get("voice") or "").strip().lower() == preferred_voice.strip().lower()
+
+
+def _build_attempt(
+    candidate: Dict[str, Any],
+    *,
+    status_code: Optional[int] = None,
+    dashscope_code: Optional[str] = None,
+    dashscope_message: Optional[str] = None,
+    request_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    return {
+        "provider": candidate.get("provider"),
+        "model": candidate.get("model"),
+        "voice": candidate.get("voice"),
+        "language_type": candidate.get("language_type"),
+        "status_code": status_code,
+        "dashscope_code": dashscope_code,
+        "dashscope_message": dashscope_message,
+        "request_id": request_id,
+    }
+
+
+class TTSAllFailedError(RuntimeError):
+    def __init__(self, message: str, attempts: List[Dict[str, Any]]):
+        super().__init__(message)
+        self.attempts = attempts
+
+    def to_dict(self) -> Dict[str, Any]:
+        message = self.attempts[-1].get("dashscope_message") if self.attempts else str(self)
+        return {
+            "type": "error",
+            "error": str(self),
+            "message": message or str(self),
+            "attempts": self.attempts,
+        }
+
+
+def _extract_audio_meta(resp: Any, candidate: Dict[str, Any]) -> Dict[str, Any]:
     out = _safe_get(resp, "output", default=None)
     audio = _safe_get(out, "audio", default=None)
-
     url = _safe_get(audio, "url", default=None)
-    expires_at = _safe_get(audio, "expires_at", default=None)
-    data = _safe_get(audio, "data", default=None)  # 有时会有 base64（不保证）
-
-    # 也可能是 dict：resp["output"]["audio"]["url"]
-    # _safe_get 已经兼容
-
-    meta = {"url": url, "expires_at": expires_at}
-    if data:
-        meta["data"] = data  # 可选：不推荐前端用它播放（体积大），但留作排障
-    return meta
-
-
-def _extract_audio_delta(resp: Any) -> Optional[str]:
-    out = _safe_get(resp, "output", default=None)
-    audio = _safe_get(out, "audio", default=None)
-    delta = _safe_get(audio, "delta", default=None)
-    if delta:
-        return str(delta)
     data = _safe_get(audio, "data", default=None)
-    if data:
-        return str(data)
-    return None
+    expires_at = _safe_get(audio, "expires_at", default=None)
+    return {
+        "provider": candidate.get("provider"),
+        "model": candidate.get("model"),
+        "voice": candidate.get("voice"),
+        "language_type": candidate.get("language_type"),
+        "audio_url": str(url) if url else None,
+        "audio_base64": str(data) if data else None,
+        "expires_at": expires_at,
+        "format": _guess_audio_format(str(url) if url else None, str(data) if data else None),
+    }
 
 
-def _normalize_text(text: str) -> str:
-    return (text or "").strip()
+async def _call_qwen_tts(text: str, candidate: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any]]:
+    def _run():
+        return SpeechSynthesizer.call(
+            model=str(candidate["model"]),
+            text=text,
+            api_key=DASHSCOPE_API_KEY,
+            voice=str(candidate["voice"]),
+        )
+
+    try:
+        resp = await asyncio.to_thread(_run)
+    except Exception as e:
+        attempt = _build_attempt(
+            candidate,
+            status_code=getattr(e, "status_code", None),
+            dashscope_code=str(getattr(e, "code", "") or "") or None,
+            dashscope_message=str(getattr(e, "message", "") or str(e)),
+            request_id=str(getattr(e, "request_id", "") or "") or None,
+        )
+        return None, attempt
+
+    status_code = _safe_get(resp, "status_code")
+    code = _safe_get(resp, "code")
+    message = _safe_get(resp, "message")
+    request_id = _safe_get(resp, "request_id")
+    meta = _extract_audio_meta(resp, candidate)
+
+    if status_code not in (None, HTTPStatus.OK, 200):
+        return None, _build_attempt(
+            candidate,
+            status_code=int(status_code) if status_code is not None else None,
+            dashscope_code=str(code) if code else None,
+            dashscope_message=str(message or "DashScope request failed"),
+            request_id=str(request_id) if request_id else None,
+        )
+
+    if meta["audio_url"] or meta["audio_base64"]:
+        return meta, _build_attempt(
+            candidate,
+            status_code=200,
+            dashscope_code=str(code) if code else None,
+            dashscope_message=str(message or "ok"),
+            request_id=str(request_id) if request_id else None,
+        )
+
+    return None, _build_attempt(
+        candidate,
+        status_code=200,
+        dashscope_code=str(code) if code else None,
+        dashscope_message="DashScope returned success but no audio data/url",
+        request_id=str(request_id) if request_id else None,
+    )
 
 
-def _split_text_for_tts(text: str) -> list[str]:
-    """
-    非流式：一次合成建议不要太长（也避免超过模型/接口限制）。
-    默认尽量整段合成（更连贯）。仅在过长时才切分。
-    """
-    text = _normalize_text(text)
-    if not text:
-        return []
-
-    # 你可按需调整
-    MAX_CHARS = int(os.getenv("TTS_MAX_CHARS_PER_REQ", "300"))
-
-    if len(text) <= MAX_CHARS:
-        return [text]
-
-    seps = set("。！？!?；;\n")
-    chunks = []
-    cur = []
-    for ch in text:
-        cur.append(ch)
-        if ch in seps and len(cur) >= MIN_CHARS_PER_REQ:
-            seg = "".join(cur).strip()
-            if seg:
-                chunks.append(seg)
-            cur = []
-        # 过长强制切
-        if len(cur) >= MAX_CHARS:
-            seg = "".join(cur).strip()
-            if seg:
-                chunks.append(seg)
-            cur = []
-
-    tail = "".join(cur).strip()
-    if tail:
-        chunks.append(tail)
-    return [c for c in chunks if c]
-
-
-async def _dashscope_tts_nonstream(text: str, model: str, voice: str, language_type: str) -> Any:
-    """
-    非流式 TTS：用线程执行 SDK 同步调用，避免阻塞事件循环。
-    """
+async def _call_multimodal_tts(text: str, candidate: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any]]:
     def _run():
         return dashscope.MultiModalConversation.call(
             api_key=DASHSCOPE_API_KEY,
-            model=model,
+            model=str(candidate["model"]),
             text=text,
-            voice=voice,
-            language_type=language_type,
-            # 注意：不传 stream 或 stream=False 即为非流式
+            voice=str(candidate["voice"]),
+            language_type=str(candidate["language_type"]),
         )
 
-    return await asyncio.to_thread(_run)
+    try:
+        resp = await asyncio.to_thread(_run)
+    except Exception as e:
+        attempt = _build_attempt(
+            candidate,
+            status_code=getattr(e, "status_code", None),
+            dashscope_code=str(getattr(e, "code", "") or "") or None,
+            dashscope_message=str(getattr(e, "message", "") or str(e)),
+            request_id=str(getattr(e, "request_id", "") or "") or None,
+        )
+        return None, attempt
+
+    status_code = _safe_get(resp, "status_code")
+    code = _safe_get(resp, "code")
+    message = _safe_get(resp, "message")
+    request_id = _safe_get(resp, "request_id")
+    meta = _extract_audio_meta(resp, candidate)
+
+    if status_code not in (None, HTTPStatus.OK, 200):
+        return None, _build_attempt(
+            candidate,
+            status_code=int(status_code) if status_code is not None else None,
+            dashscope_code=str(code) if code else None,
+            dashscope_message=str(message or "DashScope request failed"),
+            request_id=str(request_id) if request_id else None,
+        )
+
+    if meta["audio_url"] or meta["audio_base64"]:
+        return meta, _build_attempt(
+            candidate,
+            status_code=200,
+            dashscope_code=str(code) if code else None,
+            dashscope_message=str(message or "ok"),
+            request_id=str(request_id) if request_id else None,
+        )
+
+    return None, _build_attempt(
+        candidate,
+        status_code=200,
+        dashscope_code=str(code) if code else None,
+        dashscope_message="DashScope returned success but no audio data/url",
+        request_id=str(request_id) if request_id else None,
+    )
 
 
-async def _dashscope_tts_stream(text: str, model: str, voice: str, language_type: str):
-    loop = asyncio.get_running_loop()
-    q: asyncio.Queue[Any] = asyncio.Queue(maxsize=64)
+async def _call_tts_candidate(text: str, candidate: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any]]:
+    provider = str(candidate.get("provider") or "").strip()
+    if provider == "qwen_tts":
+        return await _call_qwen_tts(text, candidate)
+    if provider == "multimodal":
+        return await _call_multimodal_tts(text, candidate)
+    return None, _build_attempt(
+        candidate,
+        dashscope_message=f"Unsupported provider: {provider}",
+    )
 
-    def _worker():
-        try:
-            responses = dashscope.MultiModalConversation.call(
-                api_key=DASHSCOPE_API_KEY,
-                model=model,
-                text=text,
-                voice=voice,
-                language_type=language_type,
-                stream=True,
-            )
-            for resp in responses:
-                loop.call_soon_threadsafe(q.put_nowait, resp)
-            loop.call_soon_threadsafe(q.put_nowait, None)
-        except Exception as e:
-            loop.call_soon_threadsafe(q.put_nowait, e)
 
-    threading.Thread(target=_worker, daemon=True).start()
+def _prioritize_candidates(preferred_voice: Optional[str], bucket: str) -> List[Dict[str, Any]]:
+    cached: Optional[Dict[str, Any]]
+    with _probe_lock:
+        cached = dict(_probe_cache[bucket]) if bucket in _probe_cache else None
 
-    while True:
-        item = await q.get()
-        if item is None:
-            break
-        if isinstance(item, Exception):
-            raise item
-        yield item
+    ordered: List[Dict[str, Any]] = []
+    if cached:
+        ordered.append(cached)
+
+    matches = []
+    others = []
+    for candidate in TTS_CANDIDATES:
+        if cached and all(candidate.get(k) == cached.get(k) for k in ("provider", "model", "voice", "language_type")):
+            continue
+        if _candidate_matches_voice(candidate, preferred_voice):
+            matches.append(candidate)
+        else:
+            others.append(candidate)
+    return _dedupe_candidates(ordered + matches + others)
+
+
+async def _probe_bucket(bucket: str, preferred_voice: Optional[str] = None) -> Tuple[Optional[Dict[str, Any]], List[Dict[str, Any]]]:
+    probe_text = CHINESE_PROBE_TEXT if bucket == "zh" else DEFAULT_PROBE_TEXT
+    attempts: List[Dict[str, Any]] = []
+    for candidate in _prioritize_candidates(preferred_voice, bucket):
+        meta, attempt = await _call_tts_candidate(probe_text, candidate)
+        attempts.append(attempt)
+        if meta:
+            with _probe_lock:
+                _probe_cache[bucket] = {
+                    "provider": candidate["provider"],
+                    "model": candidate["model"],
+                    "voice": candidate["voice"],
+                    "language_type": candidate["language_type"],
+                }
+                _probe_attempts[bucket] = attempts[:]
+            return meta, attempts
+    with _probe_lock:
+        _probe_attempts[bucket] = attempts[:]
+    return None, attempts
+
+
+async def synthesize_with_candidates(
+    text: str,
+    *,
+    preferred_voice: Optional[str] = None,
+    run_probe: bool = True,
+) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    bucket = _text_bucket(text)
+    attempts: List[Dict[str, Any]] = []
+
+    if run_probe:
+        with _probe_lock:
+            has_cache = bucket in _probe_cache
+        if not has_cache:
+            await _probe_bucket(bucket, preferred_voice=preferred_voice)
+
+    for candidate in _prioritize_candidates(preferred_voice, bucket):
+        meta, attempt = await _call_tts_candidate(text, candidate)
+        attempts.append(attempt)
+        if meta:
+            with _probe_lock:
+                _probe_cache[bucket] = {
+                    "provider": candidate["provider"],
+                    "model": candidate["model"],
+                    "voice": candidate["voice"],
+                    "language_type": candidate["language_type"],
+                }
+                _probe_attempts[bucket] = attempts[:]
+            return meta, attempts
+
+    raise TTSAllFailedError("All TTS providers failed", attempts)
+
+
+@app.post("/api/tts/speak")
+async def speak(req: TTSSpeakRequest) -> Dict[str, Any]:
+    if not DASHSCOPE_API_KEY:
+        return JSONResponse(
+            status_code=500,
+            content={"type": "error", "error": "DASHSCOPE_API_KEY not set in environment"},
+        )
+
+    text = _normalize_text(req.text)
+    if not text:
+        return JSONResponse(status_code=400, content={"type": "error", "error": "Empty text"})
+
+    voice_type = (req.voice_type or "").strip().lower() or "cute"
+    preferred_voice = VOICE_TYPE_TO_VOICE.get(voice_type) or (req.voice_type or DEFAULT_VOICE)
+
+    try:
+        meta, attempts = await synthesize_with_candidates(text, preferred_voice=preferred_voice)
+    except TTSAllFailedError as e:
+        return JSONResponse(status_code=500, content=e.to_dict())
+
+    result: Dict[str, Any] = {
+        "success": True,
+        "provider": meta["provider"],
+        "model": meta["model"],
+        "voice": meta["voice"],
+        "language_type": meta["language_type"],
+        "format": meta["format"],
+        "attempts": attempts,
+    }
+    if meta.get("audio_url"):
+        result["audio_url"] = meta["audio_url"]
+    if meta.get("audio_base64"):
+        result["audio_base64"] = meta["audio_base64"]
+    return result
 
 
 class SessionState:
     def __init__(self):
-        self.text_buf: str = ""
-        self.closed: bool = False
+        self.text_buf = ""
+        self.closed = False
+
+
+def _ws_error_payload(error: TTSAllFailedError) -> Dict[str, Any]:
+    return error.to_dict()
 
 
 @app.websocket("/ws/tts")
 async def ws_tts(ws: WebSocket):
-    """
-    前端协议（兼容你当前写法）：
-    - {type:"input_text_buffer.append", text:"..."}   # 只缓冲
-    - {type:"input_text_buffer.commit"}              # 触发一次性合成（非流式）
-    - {type:"session.finish"}                        # 关闭
-    返回：session.ready / response.audio.delta / response.segment.done / response.done / error
-    """
     await ws.accept()
 
     if not DASHSCOPE_API_KEY:
-        await ws.send_text(json.dumps({
-            "type": "error",
-            "error": "Missing DASHSCOPE_API_KEY in server environment"
-        }, ensure_ascii=False))
+        await ws.send_text(json.dumps({"type": "error", "error": "DASHSCOPE_API_KEY not set in environment"}, ensure_ascii=False))
         await ws.close()
         return
 
@@ -274,16 +546,21 @@ async def ws_tts(ws: WebSocket):
     model = qp.get("model") or DEFAULT_MODEL
     voice = qp.get("voice") or DEFAULT_VOICE
     language_type = qp.get("language_type") or DEFAULT_LANG
-
     state = SessionState()
 
-    await ws.send_text(json.dumps({
-        "type": "session.ready",
-        "model": model,
-        "voice": voice,
-        "language_type": language_type,
-        "mode": "streaming_pcm"
-    }, ensure_ascii=False))
+    await ws.send_text(
+        json.dumps(
+            {
+                "type": "session.ready",
+                "sample_rate": PCM_SAMPLE_RATE,
+                "format": PCM_FORMAT,
+                "voice": voice,
+                "model": model,
+                "language_type": language_type,
+            },
+            ensure_ascii=False,
+        )
+    )
 
     try:
         while True:
@@ -292,64 +569,88 @@ async def ws_tts(ws: WebSocket):
             mtype = msg.get("type")
 
             if mtype == "input_text_buffer.append":
-                piece = (msg.get("text") or "")
-                state.text_buf += piece
+                state.text_buf += str(msg.get("text") or "")
+                continue
 
-            elif mtype == "input_text_buffer.commit":
+            if mtype == "input_text_buffer.commit":
                 text = _normalize_text(state.text_buf)
                 state.text_buf = ""
-
                 if not text:
-                    await ws.send_text(json.dumps({
-                        "type": "error",
-                        "error": "Empty text buffer on commit"
-                    }, ensure_ascii=False))
+                    await ws.send_text(json.dumps({"type": "error", "error": "Empty text buffer on commit"}, ensure_ascii=False))
                     continue
 
-                parts = _split_text_for_tts(text)
+                try:
+                    parts = _split_text_for_tts(text)
+                    for seg in parts:
+                        meta, _attempts = await synthesize_with_candidates(seg, preferred_voice=voice)
+                        if meta.get("audio_base64"):
+                            await ws.send_text(
+                                json.dumps(
+                                    {
+                                        "type": "response.audio.base64",
+                                        "audio_base64": meta["audio_base64"],
+                                        "format": meta["format"],
+                                        "provider": meta["provider"],
+                                        "model": meta["model"],
+                                        "voice": meta["voice"],
+                                        "language_type": meta["language_type"],
+                                    },
+                                    ensure_ascii=False,
+                                )
+                            )
+                        elif meta.get("audio_url"):
+                            await ws.send_text(
+                                json.dumps(
+                                    {
+                                        "type": "response.audio.url",
+                                        "url": meta["audio_url"],
+                                        "format": meta["format"],
+                                        "provider": meta["provider"],
+                                        "model": meta["model"],
+                                        "voice": meta["voice"],
+                                        "language_type": meta["language_type"],
+                                    },
+                                    ensure_ascii=False,
+                                )
+                            )
+                        else:
+                            raise TTSAllFailedError(
+                                "All TTS providers failed",
+                                [
+                                    _build_attempt(
+                                        {
+                                            "provider": meta.get("provider"),
+                                            "model": meta.get("model"),
+                                            "voice": meta.get("voice"),
+                                            "language_type": meta.get("language_type"),
+                                        },
+                                        dashscope_message="TTS succeeded but returned no playable audio",
+                                    )
+                                ],
+                            )
+                        await ws.send_text(json.dumps({"type": "response.segment.done"}, ensure_ascii=False))
 
-                for seg in parts:
-                    try:
-                        saw_audio = False
-                        async for resp in _dashscope_tts_stream(seg, model, voice, language_type):
-                            delta = _extract_audio_delta(resp)
-                            if not delta:
-                                continue
-                            saw_audio = True
-                            await ws.send_text(json.dumps({
-                                "type": "response.audio.delta",
-                                "delta": delta,
-                            }, ensure_ascii=False))
+                    await ws.send_text(json.dumps({"type": "response.done"}, ensure_ascii=False))
+                except TTSAllFailedError as e:
+                    await ws.send_text(json.dumps(_ws_error_payload(e), ensure_ascii=False))
+                continue
 
-                        if not saw_audio:
-                            await ws.send_text(json.dumps({
-                                "type": "error",
-                                "error": "TTS returned no audio delta",
-                            }, ensure_ascii=False))
-
-                        await ws.send_text(json.dumps({
-                            "type": "response.segment.done"
-                        }, ensure_ascii=False))
-
-                    except Exception as e:
-                        await ws.send_text(json.dumps({
-                            "type": "error",
-                            "error": f"TTS failed: {repr(e)}"
-                        }, ensure_ascii=False))
-
-                await ws.send_text(json.dumps({
-                    "type": "response.done"
-                }, ensure_ascii=False))
-
-            elif mtype == "session.finish":
+            if mtype == "session.finish":
                 state.closed = True
                 break
 
-            else:
-                await ws.send_text(json.dumps({
-                    "type": "error",
-                    "error": f"Unknown message type: {mtype}"
-                }, ensure_ascii=False))
+            if mtype == "audio.playback.ended":
+                continue
+
+            await ws.send_text(
+                json.dumps(
+                    {
+                        "type": "error",
+                        "error": f"Unknown message type: {mtype}",
+                    },
+                    ensure_ascii=False,
+                )
+            )
 
     except WebSocketDisconnect:
         state.closed = True
@@ -362,4 +663,5 @@ async def ws_tts(ws: WebSocket):
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8004)
