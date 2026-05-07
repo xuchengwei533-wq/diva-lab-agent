@@ -7,7 +7,7 @@ from websocket import WebSocketTimeoutException, create_connection
 
 WS_URL = (
     "ws://127.0.0.1:8004/ws/tts"
-    "?voice=Cherry&model=qwen3-tts-flash&language_type=Chinese"
+    "?voice=Vincent&model=qwen3-tts-flash&language_type=Chinese"
 )
 TEST_TEXT = "你好，今天我们来练习唱歌。请保持放松。"
 

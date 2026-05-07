@@ -47,7 +47,7 @@ dashscope.base_http_api_url = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope
 DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY")
 
 DEFAULT_MODEL = os.getenv("DASHSCOPE_TTS_MODEL", "qwen3-tts-flash")
-DEFAULT_VOICE = os.getenv("DASHSCOPE_TTS_VOICE", "Cherry")
+DEFAULT_VOICE = os.getenv("DASHSCOPE_TTS_VOICE", "Vincent")
 DEFAULT_LANG = os.getenv("DASHSCOPE_TTS_LANG", "Chinese")
 MIN_CHARS_PER_REQ = int(os.getenv("TTS_MIN_CHARS_PER_REQ", "24"))
 MAX_CHARS_PER_REQ = int(os.getenv("TTS_MAX_CHARS_PER_REQ", "300"))
@@ -67,13 +67,30 @@ app.add_middleware(
 
 VOICE_TYPE_TO_VOICE = {
     "cute": "Cherry",
+    "female": "Cherry",
     "lively": "Serena",
     "gentle": "Chelsie",
     "calm": "Ethan",
+    "male": "Ethan",
+    "deep_male": "Vincent",
+    "mature_male": "Andre",
+    "elder_male": "Eldric Sage",
+    "news_male": "Neil",
     "fast": "Cherry",
     "slow": "Chelsie",
     "mao": "Cherry",
 }
+
+SUPPORTED_VOICES = [
+    "Cherry",
+    "Serena",
+    "Ethan",
+    "Chelsie",
+    "Vincent",
+    "Andre",
+    "Eldric Sage",
+    "Neil",
+]
 
 _probe_cache: Dict[str, Dict[str, Any]] = {}
 _probe_attempts: Dict[str, List[Dict[str, Any]]] = {}
@@ -82,7 +99,7 @@ _probe_lock = threading.Lock()
 
 class TTSSpeakRequest(BaseModel):
     text: str = Field(..., min_length=1)
-    voice_type: Optional[str] = Field(default="cute")
+    voice_type: Optional[str] = Field(default="deep_male")
 
 
 def _safe_get(obj: Any, *keys: str, default=None):
@@ -188,7 +205,7 @@ def _dedupe_candidates(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 def _default_tts_candidates() -> List[Dict[str, Any]]:
     voices = []
-    for v in [DEFAULT_VOICE, "Cherry", "Serena", "Ethan", "Chelsie"]:
+    for v in [DEFAULT_VOICE, *SUPPORTED_VOICES]:
         if v and v not in voices:
             voices.append(v)
 
@@ -717,7 +734,7 @@ async def speak(req: TTSSpeakRequest) -> Dict[str, Any]:
     if not text:
         return JSONResponse(status_code=400, content={"type": "error", "error": "Empty text"})
 
-    voice_type = (req.voice_type or "").strip().lower() or "cute"
+    voice_type = (req.voice_type or "").strip().lower() or "deep_male"
     preferred_voice = VOICE_TYPE_TO_VOICE.get(voice_type) or (req.voice_type or DEFAULT_VOICE)
 
     try:
@@ -801,10 +818,19 @@ async def ws_tts(ws: WebSocket):
                 fatal_error = False
                 for seg in parts:
                     try:
-                        await stream_tts_with_candidates(seg, preferred_voice=voice, ws=ws)
+                        await stream_tts_with_candidates(
+                            seg,
+                            preferred_voice=voice,
+                            ws=ws,
+                            run_probe=False,
+                        )
                     except TTSAllFailedError as stream_error:
                         try:
-                            meta, fallback_attempts = await synthesize_with_candidates(seg, preferred_voice=voice)
+                            meta, fallback_attempts = await synthesize_with_candidates(
+                                seg,
+                                preferred_voice=voice,
+                                run_probe=False,
+                            )
                             await _send_ws_fallback_audio(meta, ws)
                         except TTSAllFailedError as fallback_error:
                             combined_error = TTSAllFailedError(
