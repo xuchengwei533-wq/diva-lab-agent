@@ -84,7 +84,7 @@ async def _run_demo():
     client = TTSRealtimeClient(
         base_url=URL,
         api_key=API_KEY,
-        voice="Cherry",
+        voice="Ethan",
         mode=SessionMode.SERVER_COMMIT,
         audio_callback=_audio_callback
     )

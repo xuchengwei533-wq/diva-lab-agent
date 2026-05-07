@@ -49,8 +49,9 @@ DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY")
 DEFAULT_MODEL = os.getenv("DASHSCOPE_TTS_MODEL", "qwen3-tts-flash")
 DEFAULT_VOICE = os.getenv("DASHSCOPE_TTS_VOICE", "Ethan")
 DEFAULT_LANG = os.getenv("DASHSCOPE_TTS_LANG", "Chinese")
-MIN_CHARS_PER_REQ = int(os.getenv("TTS_MIN_CHARS_PER_REQ", "24"))
-MAX_CHARS_PER_REQ = int(os.getenv("TTS_MAX_CHARS_PER_REQ", "300"))
+MIN_CHARS_PER_REQ = int(os.getenv("TTS_MIN_CHARS_PER_REQ", "40"))
+MAX_CHARS_PER_REQ = int(os.getenv("TTS_MAX_CHARS_PER_REQ", "220"))
+MIN_TTS_MERGE_CHARS = int(os.getenv("TTS_MIN_MERGE_CHARS", "15"))
 PCM_SAMPLE_RATE = int(os.getenv("TTS_PCM_SAMPLE_RATE", "24000"))
 PCM_FORMAT = os.getenv("TTS_PCM_FORMAT", "pcm_s16le")
 CHINESE_PROBE_TEXT = os.getenv("TTS_PROBE_TEXT_ZH", "你好，今天我们来练习唱歌。")
@@ -147,28 +148,60 @@ def _split_text_for_tts(text: str) -> List[str]:
     text = _normalize_text(text)
     if not text:
         return []
-    if len(text) <= MAX_CHARS_PER_REQ:
-        return [text]
-
-    seps = set("。！？!?；;\n")
+    strong_seps = set("。！？!?；;\n")
+    soft_seps = set("，,、：:")
     chunks: List[str] = []
     cur: List[str] = []
+    last_soft_idx = -1
+
+    def flush(end_idx: Optional[int] = None):
+        nonlocal cur, last_soft_idx
+        if not cur:
+            return
+        if end_idx is None or end_idx >= len(cur):
+            segment = "".join(cur).strip()
+            cur = []
+        else:
+            segment = "".join(cur[:end_idx]).strip()
+            cur = cur[end_idx:]
+        last_soft_idx = -1
+        if segment:
+            chunks.append(segment)
+
     for ch in text:
         cur.append(ch)
-        if ch in seps and len(cur) >= MIN_CHARS_PER_REQ:
-            seg = "".join(cur).strip()
-            if seg:
-                chunks.append(seg)
-            cur = []
+        if ch in soft_seps:
+            last_soft_idx = len(cur)
+
+        if ch in strong_seps and len(cur) >= MIN_CHARS_PER_REQ:
+            flush()
+            continue
+
         if len(cur) >= MAX_CHARS_PER_REQ:
-            seg = "".join(cur).strip()
-            if seg:
-                chunks.append(seg)
-            cur = []
+            if last_soft_idx >= MIN_CHARS_PER_REQ:
+                flush(last_soft_idx)
+            else:
+                flush()
+
     tail = "".join(cur).strip()
     if tail:
         chunks.append(tail)
-    return [c for c in chunks if c]
+
+    merged: List[str] = []
+    for seg in chunks:
+        value = seg.strip()
+        if not value:
+            continue
+        if merged and len(value) < MIN_TTS_MERGE_CHARS:
+            merged[-1] = (merged[-1] + value).strip()
+            continue
+        merged.append(value)
+
+    if len(merged) >= 2 and len(merged[-1]) < MIN_TTS_MERGE_CHARS:
+        merged[-2] = (merged[-2] + merged[-1]).strip()
+        merged.pop()
+
+    return merged
 
 
 def _guess_audio_format(url: Optional[str], audio_data: Optional[str]) -> str:
@@ -596,6 +629,7 @@ async def stream_tts_with_candidates(
 ) -> Dict[str, Any]:
     bucket = _text_bucket(text)
     attempts: List[Dict[str, Any]] = []
+    print(f"[TTS_SEGMENT] len={len(text)} text={text}")
 
     if run_probe:
         with _probe_lock:
@@ -831,6 +865,7 @@ async def ws_tts(ws: WebSocket):
                 parts = _split_text_for_tts(text)
                 fatal_error = False
                 for seg in parts:
+                    print(f"[TTS_SEGMENT] ws_commit len={len(seg)} text={seg}")
                     try:
                         await stream_tts_with_candidates(
                             seg,

@@ -17,9 +17,47 @@
 
       body {
         font-family: "Microsoft YaHei", Arial, sans-serif;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background-color: #2b2f3a;
         height: 100vh;
         overflow: hidden;
+        position: relative;
+        isolation: isolate;
+      }
+
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        z-index: -2;
+        background:
+          linear-gradient(
+            135deg,
+            rgba(26, 24, 22, 0.28) 0%,
+            rgba(48, 42, 37, 0.14) 100%
+          ),
+          url("./assets/images/shostakovich_bg.png") center center / cover
+            no-repeat;
+        background-color: #2b2f3a;
+        background-attachment: fixed;
+        filter: blur(12px) saturate(0.88) brightness(0.72);
+        transform: scale(1.08);
+        transform-origin: center center;
+      }
+
+      body::after {
+        content: "";
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+        background:
+          radial-gradient(
+            circle at center,
+            rgba(112, 92, 66, 0.08) 0%,
+            rgba(27, 26, 31, 0.24) 45%,
+            rgba(17, 17, 21, 0.52) 100%
+          ),
+          rgba(20, 20, 28, 0.34);
+        pointer-events: none;
       }
 
       .back-link-btn {
@@ -50,14 +88,17 @@
         height: 100vh;
         padding: 20px;
         gap: 20px;
+        position: relative;
+        z-index: 1;
       }
 
       .character-section {
         flex: 0 0 35%;
-        background: rgba(255, 255, 255, 0.1);
+        background: rgba(26, 27, 34, 0.34);
         border-radius: 20px;
-        backdrop-filter: blur(10px);
-        border: 1px solid rgba(255, 255, 255, 0.2);
+        backdrop-filter: blur(14px);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        box-shadow: 0 18px 42px rgba(0, 0, 0, 0.24);
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -88,17 +129,19 @@
 
       .chat-section {
         flex: 0 0 65%;
-        background: rgba(255, 255, 255, 0.95);
+        background: rgba(248, 244, 239, 0.88);
         border-radius: 20px;
         display: flex;
         flex-direction: column;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.26);
+        box-shadow: 0 20px 48px rgba(0, 0, 0, 0.2);
       }
 
       .chat-header {
         padding: 20px;
         border-bottom: 1px solid #e0e0e0;
-        background: white;
+        background: rgba(255, 250, 246, 0.86);
         border-radius: 20px 20px 0 0;
       }
       .chat-title {
@@ -144,7 +187,7 @@
       .chat-input-area {
         padding: 20px;
         border-top: 1px solid #e0e0e0;
-        background: white;
+        background: rgba(255, 250, 246, 0.88);
         border-radius: 0 0 20px 20px;
         display: flex;
         gap: 10px;
@@ -662,12 +705,12 @@
 
     <div class="container">
       <div class="character-section">
-        <h2 class="character-title">滴哇老师</h2>
+        <h2 class="character-title"></h2>
         <div id="oml2d-container" title="点击角色区域返回主页"></div>
         <div class="character-info">
-          <p>我是你的声乐老师滴哇</p>
-          <p>随时为你提供声乐指导</p>
-          <p>点击我可以回到主页哦~</p>
+          <p></p>
+          <p></p>
+          <p>~</p>
         </div>
       </div>
 
@@ -942,12 +985,21 @@
       const API_BASE = `http://${HOST}:8005`; // 评分服务 (asr_server.py)
       const VOICE_API_URL = `http://${HOST}:8006`; // ASR 服务 (asr_new.py)
       const CHAT_API_URL = `http://${HOST}:8003`;
+      const TTS_REST_URL = `http://${HOST}:8004/api/tts/speak`;
 
       // =========================
-      // 流式 TTS：ws://localhost:8004/ws/tts
+      // 流式 TTS
       // =========================
-      const TTS_WS_URL = `ws://localhost:8004/ws/tts?voice=Cherry&model=qwen3-tts-flash&language_type=Chinese`;
-      const TTS_COMMIT_MIN_CHARS = 12;
+      const TTS_WS_URL = `${
+        location.protocol === "https:" ? "wss" : "ws"
+      }://${HOST}:8004/ws/tts?voice=Ethan&model=qwen3-tts-flash&language_type=Chinese`;
+      const TTS_SENTENCE_END_RE = /[。！？!?；;\n]/;
+      const TTS_SOFT_PUNCT_RE = /[，,、：:]/;
+      const MIN_TTS_SEGMENT_CHARS = 40;
+      const MIN_TTS_COMPLETE_CHARS = 20;
+      const MIN_TTS_MERGE_TAIL_CHARS = 15;
+      const MAX_TTS_SEGMENT_CHARS = 160;
+      const TTS_FORCE_FLUSH_MS = 420;
 
       let ttsEnabled = false;
       let ttsSocket = null;
@@ -956,18 +1008,260 @@
       let ttsFlushTimer = null;
       let ttsReconnectTimer = null;
       let ttsAudioEl = null;
+      let ttsLastError = "";
+      let ttsUrlQueue = [];
+      let ttsUrlPlaying = false;
+      let ttsRestFallback = false;
+      let ttsWsReceivedAudio = false;
+      let ttsOwnedObjectUrls = new Set();
+      let ttsDeltaChunks = [];
+      let ttsDeltaFormat = "";
+      let ttsDeltaSampleRate = 24000;
+      let ttsPcmRemainder = new Uint8Array(0);
+      let ttsSegmentQueue = [];
+      let ttsSegmentInFlight = false;
 
       // ======== 关键修复 1：稳健 little-endian PCM 解码 ========
+      function resetTtsPcmDecoder() {
+        ttsPcmRemainder = new Uint8Array(0);
+      }
+
       function base64ToInt16Array(b64) {
         const bin = atob(b64);
-        const bytes = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        const incoming = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) incoming[i] = bin.charCodeAt(i);
 
-        const n = Math.floor(bytes.byteLength / 2);
+        const bytes = new Uint8Array(ttsPcmRemainder.length + incoming.length);
+        if (ttsPcmRemainder.length) {
+          bytes.set(ttsPcmRemainder, 0);
+        }
+        bytes.set(incoming, ttsPcmRemainder.length);
+
+        const completeBytes = bytes.byteLength - (bytes.byteLength % 2);
+        if (completeBytes <= 0) {
+          ttsPcmRemainder = bytes;
+          return new Int16Array(0);
+        }
+
+        ttsPcmRemainder =
+          completeBytes < bytes.byteLength
+            ? bytes.slice(completeBytes)
+            : new Uint8Array(0);
+
+        const n = completeBytes / 2;
         const out = new Int16Array(n);
         const view = new DataView(bytes.buffer);
         for (let i = 0; i < n; i++) out[i] = view.getInt16(i * 2, true);
         return out;
+      }
+
+      function base64ToBytes(b64) {
+        const bin = atob(b64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        return bytes;
+      }
+
+      function guessMimeFromFormat(format) {
+        const fmt = (format || "").toLowerCase();
+        if (fmt.includes("mp3") || fmt.includes("mpeg")) return "audio/mpeg";
+        if (fmt.includes("wav")) return "audio/wav";
+        if (fmt.includes("ogg")) return "audio/ogg";
+        if (fmt.includes("webm")) return "audio/webm";
+        return "audio/wav";
+      }
+
+      function isPcmFormat(format) {
+        return (format || "").toLowerCase().includes("pcm");
+      }
+
+      function base64ToBlobUrl(b64, format = "wav") {
+        const bytes = base64ToBytes(b64);
+        const blob = new Blob([bytes], { type: guessMimeFromFormat(format) });
+        const url = URL.createObjectURL(blob);
+        ttsOwnedObjectUrls.add(url);
+        return url;
+      }
+
+      function base64ChunksToBlobUrl(chunks, format = "wav") {
+        const parts = (chunks || []).map((chunk) => base64ToBytes(chunk));
+        const blob = new Blob(parts, { type: guessMimeFromFormat(format) });
+        const url = URL.createObjectURL(blob);
+        ttsOwnedObjectUrls.add(url);
+        return url;
+      }
+
+      function resetTtsDeltaBuffer() {
+        ttsDeltaChunks = [];
+        ttsDeltaFormat = "";
+        ttsDeltaSampleRate = 24000;
+        resetTtsPcmDecoder();
+      }
+
+      function ensureTtsPlayer(sampleRate = 24000) {
+        const rate = Number(sampleRate) || 24000;
+        if (!ttsPlayer || ttsPlayer.inRate !== rate) {
+          ttsPlayer = new PcmStreamPlayer(rate);
+        }
+        return ttsPlayer;
+      }
+
+      function revokeOwnedTtsUrls() {
+        for (const url of ttsOwnedObjectUrls) {
+          try {
+            URL.revokeObjectURL(url);
+          } catch (_) {}
+        }
+        ttsOwnedObjectUrls.clear();
+      }
+
+      function clearTtsAudioQueue() {
+        ttsSegmentQueue = [];
+        ttsSegmentInFlight = false;
+        ttsUrlQueue = [];
+        ttsUrlPlaying = false;
+        resetTtsDeltaBuffer();
+        if (ttsAudioEl) {
+          try {
+            ttsAudioEl.pause();
+          } catch (_) {}
+          ttsAudioEl = null;
+        }
+        if (ttsPlayer) ttsPlayer.resetSchedule();
+        revokeOwnedTtsUrls();
+      }
+
+      function playNextTtsItem() {
+        if (ttsUrlPlaying) return;
+        const next = ttsUrlQueue.shift();
+        if (!next) return;
+        ttsUrlPlaying = true;
+
+        const audio = new Audio(next.url);
+        ttsAudioEl = audio;
+        audio.onended = () => {
+          ttsUrlPlaying = false;
+          if (next.revoke) {
+            try {
+              URL.revokeObjectURL(next.url);
+            } catch (_) {}
+            ttsOwnedObjectUrls.delete(next.url);
+          }
+          playNextTtsItem();
+        };
+        audio.onerror = () => {
+          ttsUrlPlaying = false;
+          if (next.revoke) {
+            try {
+              URL.revokeObjectURL(next.url);
+            } catch (_) {}
+            ttsOwnedObjectUrls.delete(next.url);
+          }
+          reportTtsIssue("TTS音频播放失败");
+          playNextTtsItem();
+        };
+        audio.play().catch((e) => {
+          ttsUrlPlaying = false;
+          if (next.revoke) {
+            try {
+              URL.revokeObjectURL(next.url);
+            } catch (_) {}
+            ttsOwnedObjectUrls.delete(next.url);
+          }
+          reportTtsIssue("TTS音频播放失败: " + e.message);
+          playNextTtsItem();
+        });
+      }
+
+      function enqueueTtsUrl(url, revoke = false) {
+        if (!url) return;
+        ttsUrlQueue.push({ url, revoke });
+        playNextTtsItem();
+      }
+
+      function enqueueTtsBase64(audioBase64, format = "wav") {
+        if (!audioBase64) return;
+        const url = base64ToBlobUrl(audioBase64, format);
+        enqueueTtsUrl(url, true);
+      }
+
+      function flushBufferedDeltaAudio() {
+        if (!ttsDeltaChunks.length || isPcmFormat(ttsDeltaFormat)) return;
+        const url = base64ChunksToBlobUrl(ttsDeltaChunks, ttsDeltaFormat || "wav");
+        resetTtsDeltaBuffer();
+        enqueueTtsUrl(url, true);
+      }
+
+      function formatTtsErrorPayload(payload) {
+        if (!payload) return "未知TTS错误";
+        const data =
+          payload && typeof payload === "object" && payload.detail
+            ? payload.detail
+            : payload;
+        if (typeof data === "string") return data;
+        if (!data || typeof data !== "object") return "未知TTS错误";
+
+        const parts = [];
+        const lastAttempt =
+          Array.isArray(data.attempts) && data.attempts.length
+            ? data.attempts[data.attempts.length - 1]
+            : null;
+        const code = data.dashscope_code || lastAttempt?.dashscope_code;
+        const message =
+          data.message || data.error || lastAttempt?.dashscope_message;
+        const provider = data.provider || lastAttempt?.provider;
+        const model = data.model || lastAttempt?.model;
+        const voice = data.voice || lastAttempt?.voice;
+
+        if (code) parts.push(code);
+        if (message) parts.push(message);
+        if (provider) parts.push(`provider=${provider}`);
+        if (model) parts.push(`model=${model}`);
+        if (voice) parts.push(`voice=${voice}`);
+
+        return parts.join(" / ") || "未知TTS错误";
+      }
+
+      function toUserFriendlyTtsError(detail) {
+        const text = String(detail || "").trim();
+        if (!text) return "语音播报暂时不可用";
+        return text
+          .replace(/TTS\s*WebSocket/gi, "语音播报服务")
+          .replace(/\bWebSocket\b/gi, "语音播报服务")
+          .replace("已关闭", "连接已断开")
+          .replace("连接失败", "暂时不可用")
+          .replace("连接超时", "响应超时");
+      }
+
+      function reportTtsIssue(detail, extra = null) {
+        const text = toUserFriendlyTtsError(detail);
+        if (extra) {
+          console.warn("[TTS]", text, extra);
+        } else {
+          console.warn("[TTS]", text);
+        }
+        return text;
+      }
+
+      async function speakTextViaRest(text) {
+        const resp = await fetch(TTS_REST_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, voice_type: "deep_male" }),
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || !data.success) {
+          throw new Error(formatTtsErrorPayload(data));
+        }
+        if (data.audio_url) {
+          enqueueTtsUrl(data.audio_url, false);
+          return;
+        }
+        if (data.audio_base64) {
+          enqueueTtsBase64(data.audio_base64, data.format || "wav");
+          return;
+        }
+        throw new Error("REST TTS返回了 success 但没有可播放音频");
       }
 
       // ======== 关键修复 2：合并分片 + 预缓冲 + 重采样，避免“断裂/抖动” ========
@@ -981,8 +1275,9 @@
           this.queue = []; // Int16Array[]
           this.queuedSamples = 0;
 
-          this.minBufferSec = 0.1; // 每次至少合并 100ms 再播放（关键）
-          this.startBufferSec = 0.12; // 首包预缓冲 120ms
+          this.minBufferSec = 0.28; // 增加 jitter buffer，优先保证连贯性
+          this.startBufferSec = 0.32; // 首包预缓冲 320ms
+          this.edgeFadeSec = 0.004; // 4ms 边缘淡入淡出，减少接缝 click/pop
           this.nextTime = 0;
         }
 
@@ -1012,6 +1307,13 @@
             const float32 = this._toFloatAndResampleIfNeeded(merged);
             this._playFloat32(float32);
           }
+        }
+
+        flushPending() {
+          if (!this.queuedSamples) return;
+          const merged = this._mergeQueue();
+          const float32 = this._toFloatAndResampleIfNeeded(merged);
+          this._playFloat32(float32);
         }
 
         _mergeQueue() {
@@ -1048,6 +1350,9 @@
         }
 
         _playFloat32(float32) {
+          if (!float32 || float32.length === 0) return;
+          this._applyEdgeFade(float32);
+
           const buffer = this.ctx.createBuffer(1, float32.length, this.outRate);
           buffer.copyToChannel(float32, 0);
 
@@ -1061,10 +1366,30 @@
           src.start(this.nextTime);
           this.nextTime += buffer.duration;
         }
+
+        _applyEdgeFade(float32) {
+          const fadeSamples = Math.min(
+            Math.floor(this.outRate * this.edgeFadeSec),
+            Math.floor(float32.length / 4),
+          );
+          if (fadeSamples <= 1) return;
+
+          for (let i = 0; i < fadeSamples; i++) {
+            const gain = i / fadeSamples;
+            float32[i] *= gain;
+          }
+
+          for (let i = 0; i < fadeSamples; i++) {
+            const idx = float32.length - 1 - i;
+            const gain = i / fadeSamples;
+            float32[idx] *= gain;
+          }
+        }
       }
 
       function scheduleTtsReconnect() {
         if (!ttsEnabled) return;
+        if (ttsRestFallback) return;
         if (ttsReconnectTimer) return;
         ttsReconnectTimer = setTimeout(async () => {
           ttsReconnectTimer = null;
@@ -1075,34 +1400,104 @@
       }
 
       async function connectTts() {
-        if (
-          ttsSocket &&
-          (ttsSocket.readyState === WebSocket.OPEN ||
-            ttsSocket.readyState === WebSocket.CONNECTING)
-        )
+        if (ttsSocket && ttsSocket.readyState === WebSocket.OPEN) return;
+        if (ttsSocket && ttsSocket.readyState === WebSocket.CONNECTING) {
+          await new Promise((resolve, reject) => {
+            const startedAt = Date.now();
+            const timer = setInterval(() => {
+              if (!ttsSocket) {
+                clearInterval(timer);
+                reject(new Error("语音播报服务连接已断开"));
+                return;
+              }
+              if (ttsSocket.readyState === WebSocket.OPEN) {
+                clearInterval(timer);
+                resolve();
+                return;
+              }
+              if (
+                ttsSocket.readyState === WebSocket.CLOSING ||
+                ttsSocket.readyState === WebSocket.CLOSED ||
+                Date.now() - startedAt > 4000
+              ) {
+                clearInterval(timer);
+                reject(new Error(ttsLastError || "语音播报服务暂时不可用"));
+              }
+            }, 80);
+          });
           return;
+        }
 
-        ttsPlayer = ttsPlayer || new PcmStreamPlayer(24000);
-        await ttsPlayer.ensureRunning();
+        await ensureTtsPlayer(24000).ensureRunning();
 
-        ttsSocket = new WebSocket(TTS_WS_URL);
+        await new Promise((resolve, reject) => {
+          let settled = false;
+          const socket = new WebSocket(TTS_WS_URL);
+          const timeout = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            ttsRestFallback = true;
+            ttsLastError = ttsLastError || "语音播报服务响应超时";
+            try {
+              socket.close();
+            } catch (_) {}
+            reject(new Error(ttsLastError));
+          }, 4000);
 
-        ttsSocket.onopen = () => {
-          console.log("[TTS] ws open");
-          if (ttsPlayer) ttsPlayer.resetSchedule();
-        };
+          const finishResolve = () => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            resolve();
+          };
 
-        ttsSocket.onerror = (e) => {
-          console.error("[TTS] ws error", e);
-        };
+          const finishReject = (err) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            reject(err);
+          };
 
-        ttsSocket.onclose = () => {
-          console.log("[TTS] ws close");
-          // 展示用：断线自动重连，避免你现场一断就没声音
-          scheduleTtsReconnect();
-        };
+          ttsSocket = socket;
 
-        ttsSocket.onmessage = (evt) => {
+          socket.onopen = () => {
+            console.log("[TTS] ws open");
+            ttsLastError = "";
+            ttsRestFallback = false;
+            if (ttsPlayer) ttsPlayer.resetSchedule();
+            setTimeout(() => {
+              try {
+                processTtsSegmentQueue();
+              } catch (_) {}
+            }, 0);
+            finishResolve();
+          };
+
+          socket.onerror = (e) => {
+            ttsRestFallback = true;
+            ttsSegmentInFlight = false;
+            const detail = reportTtsIssue(
+              ttsLastError || "语音播报服务暂时不可用",
+              e,
+            );
+            console.error("[TTS] ws error", e, detail);
+            finishReject(new Error(detail));
+          };
+
+          socket.onclose = () => {
+            console.log("[TTS] ws close");
+            ttsSegmentInFlight = false;
+            if (!settled) {
+              ttsRestFallback = true;
+              finishReject(
+                new Error(ttsLastError || "语音播报服务暂时不可用"),
+              );
+            }
+            // 展示用：断线自动重连，避免你现场一断就没声音
+            scheduleTtsReconnect();
+          };
+
+          socket.onmessage = (evt) => {
           let msg;
           try {
             msg = JSON.parse(evt.data);
@@ -1112,25 +1507,96 @@
 
           console.log("[TTS] <-", msg.type);
 
-          if (msg.type === "response.audio.delta" && msg.delta) {
-            try {
-              const int16 = base64ToInt16Array(msg.delta);
-              ttsPlayer.pushPcm16(int16);
-            } catch (e) {
-              console.warn("[TTS] delta decode failed", e);
+          if (msg.type === "session.ready") {
+            if (msg.sample_rate) {
+              ensureTtsPlayer(msg.sample_rate)
+                .ensureRunning()
+                .catch(() => {});
+            } else {
+              console.warn("[TTS] session.ready missing sample_rate", msg);
             }
             return;
           }
 
+          if (msg.type === "response.audio.delta" && msg.delta) {
+            ttsWsReceivedAudio = true;
+            const format = msg.format || "pcm_s16le";
+            const sampleRate = Number(msg.sample_rate) || 24000;
+            if (!msg.sample_rate) {
+              console.warn("[TTS] response.audio.delta missing sample_rate", msg);
+            }
+            if (isPcmFormat(format)) {
+              try {
+                ensureTtsPlayer(sampleRate).ensureRunning().catch(() => {});
+                const int16 = base64ToInt16Array(msg.delta);
+                ttsPlayer.pushPcm16(int16);
+              } catch (e) {
+                console.warn("[TTS] delta decode failed", e, msg);
+              }
+            } else {
+              ttsDeltaFormat = format;
+              ttsDeltaSampleRate = sampleRate;
+              ttsDeltaChunks.push(msg.delta);
+            }
+            return;
+          }
+
+          if (msg.type === "response.audio.url" && msg.url) {
+            ttsWsReceivedAudio = true;
+            resetTtsDeltaBuffer();
+            console.warn("[TTS] using non-streaming fallback url", msg);
+            enqueueTtsUrl(msg.url, false);
+            return;
+          }
+
+          if (msg.type === "response.audio.base64" && msg.audio_base64) {
+            ttsWsReceivedAudio = true;
+            resetTtsDeltaBuffer();
+            console.warn("[TTS] using non-streaming fallback base64", msg);
+            enqueueTtsBase64(msg.audio_base64, msg.format || "wav");
+            return;
+          }
+
           if (msg.type === "response.segment.done") {
+            if (ttsPlayer && (!ttsDeltaFormat || isPcmFormat(ttsDeltaFormat))) {
+              ttsPlayer.flushPending();
+            }
+            if (ttsDeltaChunks.length && !isPcmFormat(ttsDeltaFormat)) {
+              console.warn("[TTS] flushing buffered non-PCM delta", {
+                format: ttsDeltaFormat,
+                sample_rate: ttsDeltaSampleRate,
+                chunkCount: ttsDeltaChunks.length,
+              });
+              flushBufferedDeltaAudio();
+            }
+            ttsSegmentInFlight = false;
+            processTtsSegmentQueue();
             scheduleSegmentAck(msg.segment_id);
             return;
           }
 
-          if (msg.type === "error") {
-            console.error("[TTS] error:", msg.error);
+          if (msg.type === "response.done") {
+            if (ttsPlayer) ttsPlayer.flushPending();
+            ttsSegmentInFlight = false;
+            processTtsSegmentQueue();
+            return;
           }
-        };
+
+          if (msg.type === "error") {
+            const detail = reportTtsIssue(formatTtsErrorPayload(msg), msg);
+            ttsLastError = detail;
+            ttsRestFallback = true;
+            ttsSegmentInFlight = false;
+            console.error("[TTS] error:", msg);
+            console.error("[TTS] attempts:", msg.attempts || []);
+            try {
+              if (socket.readyState === WebSocket.OPEN) {
+                socket.close();
+              }
+            } catch (_) {}
+          }
+          };
+        });
       }
 
       function closeTts() {
@@ -1156,10 +1622,7 @@
         } catch (_) {}
         ttsSocket = null;
         ttsTextBuf = "";
-        if (ttsAudioEl) {
-          ttsAudioEl.pause();
-          ttsAudioEl = null;
-        }
+        clearTtsAudioQueue();
       }
       let ttsSegmentAckTimers = new Map();
 
@@ -1210,38 +1673,144 @@
         ttsSocket.send(JSON.stringify({ type: "input_text_buffer.commit" }));
       }
 
-      function ttsFlushNow() {
-        if (!ttsEnabled) return;
-        if (!ttsTextBuf || !ttsTextBuf.trim()) return;
-        ttsAppendText(ttsTextBuf);
-        ttsCommit();
-        ttsTextBuf = "";
+      function isTtsSocketReady() {
+        return !!ttsSocket && ttsSocket.readyState === WebSocket.OPEN;
       }
 
-      // ======== 关键修复 3：别用 180ms/10字，把“段”搞得太碎 ========
+      function normalizeTtsText(text) {
+        return String(text || "").replace(/\s+/g, " ");
+      }
+
+      function findLastPunctuationBefore(text, limit, matcher) {
+        let lastIndex = -1;
+        for (let i = 0; i < Math.min(limit, text.length); i++) {
+          if (matcher.test(text[i])) {
+            lastIndex = i;
+          }
+        }
+        return lastIndex;
+      }
+
+      function findTtsSegmentCutIndex(text) {
+        const value = String(text || "");
+        if (!value.trim()) return 0;
+        if (value.length < MIN_TTS_COMPLETE_CHARS) return 0;
+
+        let lastStrongInWindow = -1;
+        for (let i = 0; i < Math.min(value.length, MAX_TTS_SEGMENT_CHARS); i++) {
+          if (TTS_SENTENCE_END_RE.test(value[i])) {
+            lastStrongInWindow = i;
+          }
+        }
+        if (lastStrongInWindow + 1 >= MIN_TTS_SEGMENT_CHARS) {
+          return lastStrongInWindow + 1;
+        }
+
+        if (value.length < MAX_TTS_SEGMENT_CHARS) {
+          return 0;
+        }
+
+        const lastSoft = findLastPunctuationBefore(
+          value,
+          MAX_TTS_SEGMENT_CHARS,
+          TTS_SOFT_PUNCT_RE,
+        );
+        if (lastSoft + 1 >= MIN_TTS_SEGMENT_CHARS) {
+          return lastSoft + 1;
+        }
+
+        return MAX_TTS_SEGMENT_CHARS;
+      }
+
+      function enqueueTtsSegment(segment) {
+        const text = normalizeTtsText(segment).trim();
+        if (!text) return;
+        if (
+          ttsSegmentQueue.length &&
+          text.length < MIN_TTS_MERGE_TAIL_CHARS
+        ) {
+          ttsSegmentQueue[ttsSegmentQueue.length - 1] = (
+            ttsSegmentQueue[ttsSegmentQueue.length - 1] + text
+          ).trim();
+        } else {
+          ttsSegmentQueue.push(text);
+        }
+        processTtsSegmentQueue();
+      }
+
+      function processTtsBufferedText(force = false) {
+        if (!ttsEnabled) return;
+        if (!ttsTextBuf || !ttsTextBuf.trim()) return;
+        while (true) {
+          const cut = findTtsSegmentCutIndex(ttsTextBuf);
+          if (!cut) break;
+          const segment = ttsTextBuf.slice(0, cut).trim();
+          ttsTextBuf = ttsTextBuf.slice(cut);
+          enqueueTtsSegment(segment);
+        }
+
+        if (!force) return;
+
+        const tail = normalizeTtsText(ttsTextBuf).trim();
+        if (!tail) {
+          ttsTextBuf = "";
+          return;
+        }
+        ttsTextBuf = "";
+
+        if (
+          tail.length < MIN_TTS_MERGE_TAIL_CHARS &&
+          ttsSegmentQueue.length > 0
+        ) {
+          ttsSegmentQueue[ttsSegmentQueue.length - 1] = (
+            ttsSegmentQueue[ttsSegmentQueue.length - 1] + tail
+          ).trim();
+        } else if (
+          tail.length < MIN_TTS_MERGE_TAIL_CHARS &&
+          ttsSegmentInFlight &&
+          ttsSegmentQueue.length === 0
+        ) {
+          ttsSegmentQueue.push(tail);
+        } else {
+          enqueueTtsSegment(tail);
+        }
+        processTtsSegmentQueue();
+      }
+
+      function processTtsSegmentQueue() {
+        if (!ttsEnabled) return;
+        if (!isTtsSocketReady()) return;
+        if (ttsSegmentInFlight) return;
+
+        const segment = ttsSegmentQueue.shift();
+        if (!segment || !segment.trim()) return;
+
+        ttsSegmentInFlight = true;
+        console.log("[TTS_SEGMENT]", { len: segment.length, text: segment });
+        ttsAppendText(segment);
+        ttsCommit();
+      }
+
       function startTtsFlushTimer() {
         if (ttsFlushTimer) return;
         ttsFlushTimer = setInterval(() => {
           if (!ttsEnabled) return;
           if (!ttsTextBuf) return;
-          if (ttsTextBuf.length < TTS_COMMIT_MIN_CHARS) return;
-          ttsFlushNow();
-        }, 450); // 建议 450ms（与你后端 FLUSH_INTERVAL_MS 默认一致）
+          processTtsBufferedText(false);
+        }, TTS_FORCE_FLUSH_MS);
       }
 
       function ttsFeedDelta(delta) {
         if (!ttsEnabled) return;
         if (!delta) return;
 
-        ttsTextBuf += delta;
+        ttsTextBuf += normalizeTtsText(delta);
+        processTtsBufferedText(false);
+      }
 
-        const shouldFlush =
-          /[。！？!?；;，,\n]/.test(ttsTextBuf) ||
-          ttsTextBuf.length >= TTS_COMMIT_MIN_CHARS;
-
-        if (shouldFlush) {
-          ttsFlushNow();
-        }
+      function ttsFlushFinal() {
+        processTtsBufferedText(true);
+        processTtsSegmentQueue();
       }
 
       // =========================
@@ -1346,7 +1915,7 @@
       // 聊天上下文
       // =========================
       const SYSTEM_PROMPT =
-        "你是“滴哇老师”，一位专业、耐心、严格但友好的美声声乐老师。你擅长给出可执行的练习建议（呼吸、支点、共鸣、咬字、连贯、元音统一、音区过渡等），回答要结构清晰、步骤明确、避免空话。在输出时，应当保持一位老师的严谨，避免用太多的语气词，每次回答控制在100个汉字之内";
+        "你是“肖斯塔科维奇”。你以第一人称与用户对话，开场可说“我是肖斯塔科维奇，欢迎走进我的音乐世界”。你的气质深沉、克制、严肃而温和，像一位经历过战争与时代风暴的作曲家。你擅长从音乐情绪、节奏、音色、呼吸、乐句和表现力角度指导用户。回答必须简短、具体、可执行，避免空话，每次不超过100个汉字。";
       const chatHistory = [
         { role: "system", content: SYSTEM_PROMPT },
         {
@@ -2477,16 +3046,20 @@
 
         // 新一轮：清空 TTS 缓冲
         ttsTextBuf = "";
-        ttsUrlQueue = [];
-        ttsUrlPlaying = false;
-        if (ttsAudioEl) ttsAudioEl.pause();
+        ttsLastError = "";
+        ttsRestFallback = false;
+        ttsWsReceivedAudio = false;
+        clearTtsAudioQueue();
 
         // 启用 TTS 时保持长连接，避免每轮握手
         if (ttsEnabled) {
-          try {
-            await connectTts();
-            startTtsFlushTimer();
-          } catch (_) {}
+          startTtsFlushTimer();
+          connectTts().catch((e) => {
+            ttsRestFallback = true;
+            ttsLastError = toUserFriendlyTtsError(
+              e?.message || "语音播报服务暂时不可用",
+            );
+          });
         }
 
         try {
@@ -2549,7 +3122,23 @@
 
           // 收尾：把尾巴 flush + commit
           if (ttsEnabled) {
-            ttsFlushNow();
+            ttsFlushFinal();
+            if (
+              (ttsRestFallback ||
+                !ttsSocket ||
+                ttsSocket.readyState !== WebSocket.OPEN) &&
+              !ttsWsReceivedAudio &&
+              fullText.trim()
+            ) {
+              try {
+                await speakTextViaRest(fullText);
+              } catch (ttsErr) {
+                const detail = reportTtsIssue(
+                  ttsErr?.message || String(ttsErr),
+                );
+                ttsLastError = detail;
+              }
+            }
           }
         } catch (e) {
           botDiv.textContent =
