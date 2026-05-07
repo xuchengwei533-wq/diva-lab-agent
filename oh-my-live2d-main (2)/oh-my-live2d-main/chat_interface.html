@@ -673,13 +673,13 @@
 
       <div class="chat-section">
         <div class="chat-header">
-          <div class="chat-title">与滴哇老师对话</div>
+          <div class="chat-title">与肖斯塔科维奇对话</div>
           <div class="chat-subtitle">随时为你提供专业的声乐指导</div>
         </div>
 
         <div class="chat-messages" id="chatMessages">
           <div class="message message-bot">
-            你好！我是你的声乐老师滴哇，很高兴为你服务！有什么声乐方面的问题都可以问我哦~
+            我是肖斯塔科维奇，欢迎走进我的故事
           </div>
         </div>
 
@@ -926,7 +926,7 @@
           : location.origin;
         window.__LIVE2D_ASSET_BASE__ = base;
         document.write(
-          `<script src="${base}/packages/oh-my-live2d/dist/index.min.js"><\/script>`,
+          '<script src="https://unpkg.com/oh-my-live2d@0.19.3/dist/index.min.js"><\/script>',
         );
       })();
     </script>
@@ -1256,8 +1256,8 @@
             importType: "cubism5",
             models: [
               {
-                path: `${LIVE2D_ASSET_BASE}/mao_pro_en/runtime/mao_pro.model3.json`,
-                scale: 0.07,
+                path: `${LIVE2D_ASSET_BASE}/natori_pro_zh/runtime/natori_pro_t06.model3.json`,
+                scale: 0.18,
                 position: [0, 0],
                 showHitAreaFrames: false,
                 motionPreloadStrategy: "ALL",
@@ -1352,7 +1352,7 @@
         {
           role: "assistant",
           content:
-            "你好！我是你的声乐老师滴哇，很高兴为你服务！有什么声乐方面的问题都可以问我哦~",
+            "我是肖斯塔科维奇，欢迎走进我的故事",
         },
       ];
 

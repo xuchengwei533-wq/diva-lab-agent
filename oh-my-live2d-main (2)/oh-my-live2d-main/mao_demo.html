@@ -154,7 +154,7 @@
           const live2dPort = params.get('live2dPort');
           const base = live2dPort ? `${location.protocol}//${host}:${live2dPort}` : location.origin;
           window.__LIVE2D_ASSET_BASE__ = base;
-          document.write(`<script src="${base}/packages/oh-my-live2d/dist/index.min.js"><\/script>`);
+          document.write('<script src="https://unpkg.com/oh-my-live2d@0.19.3/dist/index.min.js"><\/script>');
         })();
       </script>
     </div>
@@ -192,8 +192,8 @@
       importType: 'cubism5',
       models: [
         {
-          path: `${LIVE2D_ASSET_BASE}/mao_pro_en/runtime/mao_pro.model3.json`,
-          scale: 0.10,
+          path: `${LIVE2D_ASSET_BASE}/natori_pro_zh/runtime/natori_pro_t06.model3.json`,
+          scale: 0.26,
           position: [0, 0],
           showHitAreaFrames: true,
           motionPreloadStrategy: 'ALL'
@@ -207,7 +207,7 @@
     });
 
     oml2d.onStageSlideIn(() => {
-      console.log('mao 模型加载成功');
+      console.log('natori 模型加载成功');
     });
 
     // ====== 2) PDF 上传 + 页面内预览 ======

@@ -19,6 +19,7 @@ MODE = (os.environ.get("WEB_MODE", "all") or "all").strip().lower()
 
 REPO_ROOT = os.path.abspath(os.path.join(PROJECT_ROOT, os.pardir, os.pardir))
 FACE_API_MODELS_DIR = os.path.join(REPO_ROOT, "demo", "demo", "models")
+NATORI_MODEL_DIR = os.path.join(REPO_ROOT, "natori_pro_zh")
 
 class MaoDemoHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
     extensions_map = {
@@ -49,7 +50,7 @@ class MaoDemoHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 path not in ("/mao_demo.html", "/chat_interface.html", "/favicon.ico")
                 and not path.startswith("/face-api-models/")
                 and not path.startswith("/packages/")
-                and not path.startswith("/mao_pro_en/")
+                and not path.startswith("/natori_pro_zh/")
             ):
                 self.send_error(404)
                 return
@@ -59,7 +60,7 @@ class MaoDemoHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_header("Location", "/packages/")
                 self.end_headers()
                 return
-            if not (path.startswith("/packages/") or path.startswith("/mao_pro_en/")):
+            if not (path.startswith("/packages/") or path.startswith("/natori_pro_zh/")):
                 self.send_error(404)
                 return
 
@@ -75,6 +76,13 @@ class MaoDemoHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             if rel.startswith("..") or os.path.isabs(rel):
                 return os.path.join(FACE_API_MODELS_DIR, "__invalid__")
             return os.path.join(FACE_API_MODELS_DIR, rel)
+        if clean_path.startswith("/natori_pro_zh/"):
+            rel = clean_path[len("/natori_pro_zh/"):]
+            rel = rel.replace("\\", "/")
+            rel = os.path.normpath(rel)
+            if rel.startswith("..") or os.path.isabs(rel):
+                return os.path.join(NATORI_MODEL_DIR, "__invalid__")
+            return os.path.join(NATORI_MODEL_DIR, rel)
         return super().translate_path(path)
 
     def end_headers(self):
