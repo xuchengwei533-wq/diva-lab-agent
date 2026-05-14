@@ -1,10 +1,12 @@
-cat > .gitignore << 'EOF'
 # ---- Python ----
 .venv/
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 # ---- Node / Frontend ----
 node_modules/
@@ -22,12 +24,11 @@ out/
 
 # ---- Logs ----
 *.log
+**/events.out.tfevents.*
 
 # ---- OS / Editor ----
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
-EOF
-
 .trae/
