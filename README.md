@@ -94,6 +94,18 @@ cd "c:\Project\Mao-zhishi\oh-my-live2d-main (2)\oh-my-live2d-main\backend"
 start_all_servers.bat
 ```
 
+### Optional Desktop Launcher
+
+如需使用一个独立的可选桌面宠物窗口启动器：
+
+```bash
+cd "c:\Project\Mao-zhishi\oh-my-live2d-main (2)\oh-my-live2d-main"
+python -m pip install -r desktop/requirements.txt
+python desktop/desktop_pet_launcher.py
+```
+
+该模块仅用于本地桌面展示，不参与后端服务启动，也不会改变现有运行入口表。
+
 ## Smoke Test
 
 第一阶段新增的最小冒烟测试：
