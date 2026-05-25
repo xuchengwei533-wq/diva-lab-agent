@@ -1,0 +1,8 @@
+*.mp3
+*.wav
+*.pcm
+*.raw
+*.bin
+*.log
+!storage/
+!storage/**

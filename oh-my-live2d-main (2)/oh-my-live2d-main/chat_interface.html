@@ -92,40 +92,83 @@
         z-index: 1;
       }
 
-      .character-section {
-        flex: 0 0 35%;
-        background: rgba(26, 27, 34, 0.34);
-        border-radius: 20px;
-        backdrop-filter: blur(14px);
-        border: 1px solid rgba(255, 255, 255, 0.16);
-        box-shadow: 0 18px 42px rgba(0, 0, 0, 0.24);
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding: 20px;
-      }
-      .character-title {
-        color: white;
-        font-size: 24px;
-        margin-bottom: 20px;
-        text-align: center;
-      }
-      .character-info {
-        color: rgba(255, 255, 255, 0.8);
-        font-size: 14px;
-        text-align: center;
-        margin-top: 20px;
-        line-height: 1.5;
-      }
-      #oml2d-container {
-        width: 100%;
-        height: 400px;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        cursor: pointer;
-      }
+.character-section {
+  flex: 0 0 35%;
+  background: rgba(26, 27, 34, 0.34);
+  border-radius: 20px;
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.24);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+
+  position: relative;
+  overflow: visible;
+}
+
+.character-title {
+  color: white;
+  font-size: 24px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.character-info {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 14px;
+  text-align: center;
+  margin-top: 20px;
+  line-height: 1.5;
+}
+
+#oml2d-container {
+  width: 100%;
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  cursor: pointer;
+  position: relative;
+  overflow: visible;
+}
+
+#gif-character-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: none;
+
+  align-items: center;
+  justify-content: center;
+
+  overflow: visible;
+  pointer-events: none;
+}
+
+#gif-character-layer.active {
+  display: flex;
+}
+
+#gif-character-image {
+  height: min(84vh, 100%);
+  width: auto;
+
+  max-width: 95%;
+  max-height: none;
+
+  object-fit: contain;
+  display: block;
+
+  transform: none;
+}
 
       .chat-section {
         flex: 0 0 65%;
@@ -706,7 +749,11 @@
     <div class="container">
       <div class="character-section">
         <h2 class="character-title"></h2>
-        <div id="oml2d-container" title="点击角色区域返回主页"></div>
+        <div id="oml2d-container" title="点击角色区域返回主页">
+          <div id="gif-character-layer" aria-hidden="true">
+            <img id="gif-character-image" alt="character gif" />
+          </div>
+        </div>
         <div class="character-info">
           <p></p>
           <p></p>
@@ -986,6 +1033,14 @@
       const VOICE_API_URL = `http://${HOST}:8006`; // ASR 服务 (asr_new.py)
       const CHAT_API_URL = `http://${HOST}:8003`;
       const TTS_REST_URL = `http://${HOST}:8004/api/tts/speak`;
+      const TTS_TOTAL_URL = `http://${HOST}:8004/api/tts-total/speak`;
+      const TTS_TOTAL_RANDOM_WAV_URL = `http://${HOST}:8004/api/tts-total/random-wav`;
+      const TTS_OUTPUT_MODE = 1; // 1 = 原来的 WebSocket 流式 TTS, 2 = 新的 TTS-total 完整 MP3 TTS
+      const CHARACTER_RENDER_MODE = 1; // 2 = Live2D, 1 = GIF
+      const CHARACTER_GIF_TALKING_URL = `/packages/gif/download%20(3).gif`;
+      const CHARACTER_GIF_IDLE_URL = `/packages/gif/download%20(4).gif`;
+      const CHARACTER_GIF_TALKING_CYCLE_MS = 2200;
+      const TTS_DEFAULT_VOICE_TYPE = "deep_male";
 
       // =========================
       // 流式 TTS
@@ -1000,6 +1055,14 @@
       const MIN_TTS_MERGE_TAIL_CHARS = 15;
       const MAX_TTS_SEGMENT_CHARS = 160;
       const TTS_FORCE_FLUSH_MS = 420;
+
+      function isTtsTotalMode() {
+        return Number(TTS_OUTPUT_MODE) === 2;
+      }
+
+      function isGifCharacterMode() {
+        return Number(CHARACTER_RENDER_MODE) === 1;
+      }
 
       let ttsEnabled = false;
       let ttsSocket = null;
@@ -1020,6 +1083,160 @@
       let ttsPcmRemainder = new Uint8Array(0);
       let ttsSegmentQueue = [];
       let ttsSegmentInFlight = false;
+      let ttsPreludePromise = null;
+      let ttsPreludeActive = false;
+      let ttsPreludeAudioEl = null;
+      let ttsPreludeBufferedEvents = [];
+      let ttsPreludeToken = 0;
+      let gifCharacterLayer = null;
+      let gifCharacterImage = null;
+      let gifCharacterState = "";
+      let gifTalkingReleaseTimer = null;
+      let gifTalkingHoldUntil = 0;
+      let activeSpeechTickets = new Set();
+      let speechTicketSeq = 0;
+      let speechTimerIds = [];
+
+      function setGifCharacterSpeaking(isSpeaking) {
+        if (!gifCharacterImage) return;
+        const applyGifState = (nextState) => {
+          const nextSrc =
+            nextState === "speaking"
+              ? CHARACTER_GIF_TALKING_URL
+              : CHARACTER_GIF_IDLE_URL;
+          if (
+            gifCharacterState === nextState &&
+            gifCharacterImage.getAttribute("src") === nextSrc
+          ) {
+            return;
+          }
+          gifCharacterState = nextState;
+          gifCharacterImage.src = nextSrc;
+        };
+
+        if (gifTalkingReleaseTimer) {
+          clearTimeout(gifTalkingReleaseTimer);
+          gifTalkingReleaseTimer = null;
+        }
+
+        if (isSpeaking) {
+          gifTalkingHoldUntil = Date.now() + CHARACTER_GIF_TALKING_CYCLE_MS;
+          applyGifState("speaking");
+          return;
+        }
+
+        const remainMs = gifTalkingHoldUntil - Date.now();
+        if (gifCharacterState !== "speaking" || remainMs <= 0) {
+          applyGifState("idle");
+          return;
+        }
+
+        // 播放结束后等当前这一轮 talking GIF 自然播完，再切回 idle。
+        gifTalkingReleaseTimer = setTimeout(() => {
+          gifTalkingReleaseTimer = null;
+          if (activeSpeechTickets.size > 0) {
+            gifTalkingHoldUntil = Date.now() + CHARACTER_GIF_TALKING_CYCLE_MS;
+            applyGifState("speaking");
+            return;
+          }
+          applyGifState("idle");
+        }, remainMs);
+      }
+
+      function refreshCharacterRenderMode() {
+        const container = document.getElementById("oml2d-container");
+        if (!container) return;
+        if (!gifCharacterLayer) {
+          gifCharacterLayer = document.getElementById("gif-character-layer");
+        }
+        if (!gifCharacterImage) {
+          gifCharacterImage = document.getElementById("gif-character-image");
+        }
+
+        if (isGifCharacterMode()) {
+          gifCharacterLayer?.classList.add("active");
+          setGifCharacterSpeaking(activeSpeechTickets.size > 0);
+          Array.from(container.children).forEach((child) => {
+            if (child.id !== "gif-character-layer") {
+              child.style.display = "none";
+            }
+          });
+        } else {
+          gifCharacterLayer?.classList.remove("active");
+          Array.from(container.children).forEach((child) => {
+            if (child.id !== "gif-character-layer") {
+              child.style.display = "";
+            }
+          });
+        }
+      }
+
+      function updateCharacterSpeechVisual() {
+        if (!isGifCharacterMode()) return;
+        setGifCharacterSpeaking(activeSpeechTickets.size > 0);
+      }
+
+      function beginSpeechTicket() {
+        const token = `speech-${++speechTicketSeq}`;
+        activeSpeechTickets.add(token);
+        updateCharacterSpeechVisual();
+        let released = false;
+        return () => {
+          if (released) return;
+          released = true;
+          activeSpeechTickets.delete(token);
+          updateCharacterSpeechVisual();
+        };
+      }
+
+      function clearAllSpeechTickets() {
+        for (const timerId of speechTimerIds) {
+          clearTimeout(timerId);
+        }
+        speechTimerIds = [];
+        activeSpeechTickets.clear();
+        updateCharacterSpeechVisual();
+      }
+
+      function trackAudioElementSpeaking(audio) {
+        if (!audio) return () => {};
+        let release = null;
+        const startSpeaking = () => {
+          if (!release) {
+            release = beginSpeechTicket();
+          }
+        };
+        const cleanup = () => {
+          audio.removeEventListener("play", startSpeaking);
+          audio.removeEventListener("ended", cleanup);
+          audio.removeEventListener("error", cleanup);
+          audio.removeEventListener("pause", cleanup);
+          if (release) {
+            release();
+            release = null;
+          }
+        };
+        audio.addEventListener("play", startSpeaking);
+        audio.addEventListener("ended", cleanup, { once: true });
+        audio.addEventListener("error", cleanup, { once: true });
+        audio.addEventListener("pause", cleanup, { once: true });
+        return cleanup;
+      }
+
+      function schedulePcmSpeechTicket(waitMs, durationMs) {
+        const startDelay = Math.max(0, waitMs);
+        const playDuration = Math.max(80, durationMs);
+        const startTimer = setTimeout(() => {
+          const release = beginSpeechTicket();
+          const endTimer = setTimeout(() => {
+            release();
+            speechTimerIds = speechTimerIds.filter((id) => id !== endTimer);
+          }, playDuration);
+          speechTimerIds.push(endTimer);
+          speechTimerIds = speechTimerIds.filter((id) => id !== startTimer);
+        }, startDelay);
+        speechTimerIds.push(startTimer);
+      }
 
       // ======== 关键修复 1：稳健 little-endian PCM 解码 ========
       function resetTtsPcmDecoder() {
@@ -1115,11 +1332,123 @@
         ttsOwnedObjectUrls.clear();
       }
 
+      function isTtsPreludeBlocking() {
+        return !!ttsPreludeActive;
+      }
+
+      function clearTtsPreludePlayback() {
+        if (ttsPreludeAudioEl) {
+          try {
+            ttsPreludeAudioEl.pause();
+          } catch (_) {}
+          ttsPreludeAudioEl = null;
+        }
+      }
+
+      function flushTtsPreludeBufferedEvents() {
+        if (!ttsPreludeBufferedEvents.length) return;
+        const queued = ttsPreludeBufferedEvents.slice();
+        ttsPreludeBufferedEvents = [];
+        for (const msg of queued) {
+          handleTtsAudioMessage(msg);
+        }
+      }
+
+      function releaseTtsPrelude(token) {
+        if (token !== ttsPreludeToken) return;
+        clearTtsPreludePlayback();
+        ttsPreludeActive = false;
+        ttsPreludePromise = null;
+        flushTtsPreludeBufferedEvents();
+      }
+
+      async function fetchRandomPreludeAudioUrl() {
+        const resp = await fetch(TTS_TOTAL_RANDOM_WAV_URL);
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || !data.success || !data.audio_url) {
+          throw new Error(formatTtsErrorPayload(data));
+        }
+        return data.audio_url;
+      }
+
+      function playPreludeAudioUrl(url, token) {
+        return new Promise((resolve, reject) => {
+          const audio = new Audio(url);
+          ttsPreludeAudioEl = audio;
+          let stopSpeaking = null;
+
+          const cleanup = () => {
+            if (stopSpeaking) {
+              stopSpeaking();
+              stopSpeaking = null;
+            }
+            if (ttsPreludeAudioEl === audio) {
+              ttsPreludeAudioEl = null;
+            }
+          };
+
+          audio.onended = () => {
+            cleanup();
+            releaseTtsPrelude(token);
+            resolve();
+          };
+          audio.onerror = () => {
+            cleanup();
+            releaseTtsPrelude(token);
+            reject(new Error("本地预置提示音播放失败"));
+          };
+          audio.play().catch((e) => {
+            cleanup();
+            releaseTtsPrelude(token);
+            reject(e);
+          });
+          stopSpeaking = trackAudioElementSpeaking(audio);
+        });
+      }
+
+      function maybeBufferPreludeAudioMessage(msg) {
+        if (!isTtsPreludeBlocking()) return false;
+        if (!msg || !msg.type) return false;
+        if (
+          msg.type === "response.audio.delta" ||
+          msg.type === "response.audio.url" ||
+          msg.type === "response.audio.base64" ||
+          msg.type === "response.segment.done" ||
+          msg.type === "response.done"
+        ) {
+          ttsPreludeBufferedEvents.push({ ...msg });
+          return true;
+        }
+        return false;
+      }
+
+      function startTtsPreludeOnce() {
+        if (!ttsEnabled) return;
+        const token = ++ttsPreludeToken;
+        ttsPreludeBufferedEvents = [];
+        ttsPreludeActive = true;
+        ttsPreludePromise = (async () => {
+          try {
+            const url = await fetchRandomPreludeAudioUrl();
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            await playPreludeAudioUrl(url, token);
+          } catch (e) {
+            console.warn("[TTS] 本地预置提示音不可用，直接播放远端音频", e);
+            releaseTtsPrelude(token);
+          }
+        })();
+      }
+
       function clearTtsAudioQueue() {
         ttsSegmentQueue = [];
         ttsSegmentInFlight = false;
         ttsUrlQueue = [];
         ttsUrlPlaying = false;
+        ttsPreludeToken += 1;
+        ttsPreludeActive = false;
+        ttsPreludePromise = null;
+        ttsPreludeBufferedEvents = [];
+        clearTtsPreludePlayback();
         resetTtsDeltaBuffer();
         if (ttsAudioEl) {
           try {
@@ -1128,6 +1457,7 @@
           ttsAudioEl = null;
         }
         if (ttsPlayer) ttsPlayer.resetSchedule();
+        clearAllSpeechTickets();
         revokeOwnedTtsUrls();
       }
 
@@ -1139,7 +1469,9 @@
 
         const audio = new Audio(next.url);
         ttsAudioEl = audio;
+        const stopSpeaking = trackAudioElementSpeaking(audio);
         audio.onended = () => {
+          stopSpeaking();
           ttsUrlPlaying = false;
           if (next.revoke) {
             try {
@@ -1150,6 +1482,7 @@
           playNextTtsItem();
         };
         audio.onerror = () => {
+          stopSpeaking();
           ttsUrlPlaying = false;
           if (next.revoke) {
             try {
@@ -1161,6 +1494,7 @@
           playNextTtsItem();
         };
         audio.play().catch((e) => {
+          stopSpeaking();
           ttsUrlPlaying = false;
           if (next.revoke) {
             try {
@@ -1175,12 +1509,27 @@
 
       function enqueueTtsUrl(url, revoke = false) {
         if (!url) return;
+        if (isTtsPreludeBlocking()) {
+          ttsPreludeBufferedEvents.push({
+            type: "response.audio.url",
+            url,
+          });
+          return;
+        }
         ttsUrlQueue.push({ url, revoke });
         playNextTtsItem();
       }
 
       function enqueueTtsBase64(audioBase64, format = "wav") {
         if (!audioBase64) return;
+        if (isTtsPreludeBlocking()) {
+          ttsPreludeBufferedEvents.push({
+            type: "response.audio.base64",
+            audio_base64: audioBase64,
+            format,
+          });
+          return;
+        }
         const url = base64ToBlobUrl(audioBase64, format);
         enqueueTtsUrl(url, true);
       }
@@ -1247,7 +1596,7 @@
         const resp = await fetch(TTS_REST_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, voice_type: "deep_male" }),
+          body: JSON.stringify({ text, voice_type: TTS_DEFAULT_VOICE_TYPE }),
         });
         const data = await resp.json().catch(() => ({}));
         if (!resp.ok || !data.success) {
@@ -1262,6 +1611,30 @@
           return;
         }
         throw new Error("REST TTS返回了 success 但没有可播放音频");
+      }
+
+      async function speakTextViaTotal(text) {
+        const resp = await fetch(TTS_TOTAL_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text,
+            voice_type: TTS_DEFAULT_VOICE_TYPE,
+            filename_prefix: "tts_total",
+          }),
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || !data.success) {
+          throw new Error(formatTtsErrorPayload(data));
+        }
+        if (!data.audio_url) {
+          throw new Error("TTS-total 返回了 success 但没有 audio_url");
+        }
+        enqueueTtsUrl(data.audio_url, false);
+      }
+
+      function updateCharacterRenderFromAudioState() {
+        updateCharacterSpeechVisual();
       }
 
       // ======== 关键修复 2：合并分片 + 预缓冲 + 重采样，避免“断裂/抖动” ========
@@ -1362,9 +1735,14 @@
 
           const now = this.ctx.currentTime;
           if (this.nextTime < now + 0.02) this.nextTime = now + 0.02;
-
-          src.start(this.nextTime);
+          const startAt = this.nextTime;
+          src.start(startAt);
           this.nextTime += buffer.duration;
+          schedulePcmSpeechTicket(
+            Math.max(0, (startAt - now) * 1000),
+            buffer.duration * 1000 + 60,
+          );
+          updateCharacterRenderFromAudioState();
         }
 
         _applyEdgeFade(float32) {
@@ -1507,6 +1885,10 @@
 
           console.log("[TTS] <-", msg.type);
 
+          if (maybeBufferPreludeAudioMessage(msg)) {
+            return;
+          }
+
           if (msg.type === "session.ready") {
             if (msg.sample_rate) {
               ensureTtsPlayer(msg.sample_rate)
@@ -1518,67 +1900,7 @@
             return;
           }
 
-          if (msg.type === "response.audio.delta" && msg.delta) {
-            ttsWsReceivedAudio = true;
-            const format = msg.format || "pcm_s16le";
-            const sampleRate = Number(msg.sample_rate) || 24000;
-            if (!msg.sample_rate) {
-              console.warn("[TTS] response.audio.delta missing sample_rate", msg);
-            }
-            if (isPcmFormat(format)) {
-              try {
-                ensureTtsPlayer(sampleRate).ensureRunning().catch(() => {});
-                const int16 = base64ToInt16Array(msg.delta);
-                ttsPlayer.pushPcm16(int16);
-              } catch (e) {
-                console.warn("[TTS] delta decode failed", e, msg);
-              }
-            } else {
-              ttsDeltaFormat = format;
-              ttsDeltaSampleRate = sampleRate;
-              ttsDeltaChunks.push(msg.delta);
-            }
-            return;
-          }
-
-          if (msg.type === "response.audio.url" && msg.url) {
-            ttsWsReceivedAudio = true;
-            resetTtsDeltaBuffer();
-            console.warn("[TTS] using non-streaming fallback url", msg);
-            enqueueTtsUrl(msg.url, false);
-            return;
-          }
-
-          if (msg.type === "response.audio.base64" && msg.audio_base64) {
-            ttsWsReceivedAudio = true;
-            resetTtsDeltaBuffer();
-            console.warn("[TTS] using non-streaming fallback base64", msg);
-            enqueueTtsBase64(msg.audio_base64, msg.format || "wav");
-            return;
-          }
-
-          if (msg.type === "response.segment.done") {
-            if (ttsPlayer && (!ttsDeltaFormat || isPcmFormat(ttsDeltaFormat))) {
-              ttsPlayer.flushPending();
-            }
-            if (ttsDeltaChunks.length && !isPcmFormat(ttsDeltaFormat)) {
-              console.warn("[TTS] flushing buffered non-PCM delta", {
-                format: ttsDeltaFormat,
-                sample_rate: ttsDeltaSampleRate,
-                chunkCount: ttsDeltaChunks.length,
-              });
-              flushBufferedDeltaAudio();
-            }
-            ttsSegmentInFlight = false;
-            processTtsSegmentQueue();
-            scheduleSegmentAck(msg.segment_id);
-            return;
-          }
-
-          if (msg.type === "response.done") {
-            if (ttsPlayer) ttsPlayer.flushPending();
-            ttsSegmentInFlight = false;
-            processTtsSegmentQueue();
+          if (handleTtsAudioMessage(msg)) {
             return;
           }
 
@@ -1597,6 +1919,74 @@
           }
           };
         });
+      }
+
+      function handleTtsAudioMessage(msg) {
+        if (msg.type === "response.audio.delta" && msg.delta) {
+          ttsWsReceivedAudio = true;
+          const format = msg.format || "pcm_s16le";
+          const sampleRate = Number(msg.sample_rate) || 24000;
+          if (!msg.sample_rate) {
+            console.warn("[TTS] response.audio.delta missing sample_rate", msg);
+          }
+          if (isPcmFormat(format)) {
+            try {
+              ensureTtsPlayer(sampleRate).ensureRunning().catch(() => {});
+              const int16 = base64ToInt16Array(msg.delta);
+              ttsPlayer.pushPcm16(int16);
+            } catch (e) {
+              console.warn("[TTS] delta decode failed", e, msg);
+            }
+          } else {
+            ttsDeltaFormat = format;
+            ttsDeltaSampleRate = sampleRate;
+            ttsDeltaChunks.push(msg.delta);
+          }
+          return true;
+        }
+
+        if (msg.type === "response.audio.url" && msg.url) {
+          ttsWsReceivedAudio = true;
+          resetTtsDeltaBuffer();
+          console.warn("[TTS] using non-streaming fallback url", msg);
+          enqueueTtsUrl(msg.url, false);
+          return true;
+        }
+
+        if (msg.type === "response.audio.base64" && msg.audio_base64) {
+          ttsWsReceivedAudio = true;
+          resetTtsDeltaBuffer();
+          console.warn("[TTS] using non-streaming fallback base64", msg);
+          enqueueTtsBase64(msg.audio_base64, msg.format || "wav");
+          return true;
+        }
+
+        if (msg.type === "response.segment.done") {
+          if (ttsPlayer && (!ttsDeltaFormat || isPcmFormat(ttsDeltaFormat))) {
+            ttsPlayer.flushPending();
+          }
+          if (ttsDeltaChunks.length && !isPcmFormat(ttsDeltaFormat)) {
+            console.warn("[TTS] flushing buffered non-PCM delta", {
+              format: ttsDeltaFormat,
+              sample_rate: ttsDeltaSampleRate,
+              chunkCount: ttsDeltaChunks.length,
+            });
+            flushBufferedDeltaAudio();
+          }
+          ttsSegmentInFlight = false;
+          processTtsSegmentQueue();
+          scheduleSegmentAck(msg.segment_id);
+          return true;
+        }
+
+        if (msg.type === "response.done") {
+          if (ttsPlayer) ttsPlayer.flushPending();
+          ttsSegmentInFlight = false;
+          processTtsSegmentQueue();
+          return true;
+        }
+
+        return false;
       }
 
       function closeTts() {
@@ -1818,7 +2208,7 @@
       // =========================
       let oml2d = null;
       try {
-        if (window.OML2D) {
+        if (window.OML2D && !isGifCharacterMode()) {
           const LIVE2D_ASSET_BASE =
             window.__LIVE2D_ASSET_BASE__ || location.origin;
           oml2d = OML2D.loadOml2d({
@@ -1841,6 +2231,7 @@
       } catch (e) {
         console.warn("Live2D 初始化失败（可忽略）:", e);
       }
+      refreshCharacterRenderMode();
       function goBack() {
         const params = new URLSearchParams(location.search || "");
         const live2dPort = params.get("live2dPort");
@@ -3050,9 +3441,12 @@
         ttsRestFallback = false;
         ttsWsReceivedAudio = false;
         clearTtsAudioQueue();
+        if (ttsEnabled) {
+          startTtsPreludeOnce();
+        }
 
         // 启用 TTS 时保持长连接，避免每轮握手
-        if (ttsEnabled) {
+        if (ttsEnabled && !isTtsTotalMode()) {
           startTtsFlushTimer();
           connectTts().catch((e) => {
             ttsRestFallback = true;
@@ -3103,7 +3497,7 @@
                 chatMessages.scrollTop = chatMessages.scrollHeight;
 
                 // TTS：边出字边喂
-                if (ttsEnabled) ttsFeedDelta(obj.delta);
+                if (ttsEnabled && !isTtsTotalMode()) ttsFeedDelta(obj.delta);
               } else if (obj.type === "error") {
                 botDiv.textContent = `模型调用错误：${obj.error}`;
               }
@@ -3122,21 +3516,40 @@
 
           // 收尾：把尾巴 flush + commit
           if (ttsEnabled) {
-            ttsFlushFinal();
-            if (
-              (ttsRestFallback ||
-                !ttsSocket ||
-                ttsSocket.readyState !== WebSocket.OPEN) &&
-              !ttsWsReceivedAudio &&
-              fullText.trim()
-            ) {
+            if (isTtsTotalMode()) {
               try {
-                await speakTextViaRest(fullText);
+                if (fullText.trim()) {
+                  await speakTextViaTotal(fullText);
+                }
               } catch (ttsErr) {
-                const detail = reportTtsIssue(
-                  ttsErr?.message || String(ttsErr),
-                );
-                ttsLastError = detail;
+                console.error("[TTS-total] speak failed", ttsErr);
+                console.warn("[TTS-total] fallback to legacy REST playback", ttsErr);
+                try {
+                  await speakTextViaRest(fullText);
+                } catch (restErr) {
+                  const detail = reportTtsIssue(
+                    restErr?.message || String(restErr),
+                  );
+                  ttsLastError = detail;
+                }
+              }
+            } else {
+              ttsFlushFinal();
+              if (
+                (ttsRestFallback ||
+                  !ttsSocket ||
+                  ttsSocket.readyState !== WebSocket.OPEN) &&
+                !ttsWsReceivedAudio &&
+                fullText.trim()
+              ) {
+                try {
+                  await speakTextViaRest(fullText);
+                } catch (ttsErr) {
+                  const detail = reportTtsIssue(
+                    ttsErr?.message || String(ttsErr),
+                  );
+                  ttsLastError = detail;
+                }
               }
             }
           }
@@ -3426,11 +3839,13 @@
 
           if (ttsEnabled) {
             ttsToggleBtn.textContent = "🔊";
-            try {
-              await connectTts();
-              startTtsFlushTimer();
-            } catch (e) {
-              console.error(e);
+            if (!isTtsTotalMode()) {
+              try {
+                await connectTts();
+                startTtsFlushTimer();
+              } catch (e) {
+                console.error(e);
+              }
             }
           } else {
             ttsToggleBtn.textContent = "🔇";
