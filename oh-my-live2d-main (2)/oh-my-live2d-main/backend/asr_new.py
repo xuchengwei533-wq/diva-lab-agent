@@ -27,6 +27,7 @@ from typing import Any, Dict, Optional, Tuple, Callable
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from DivaApp.Configuration import LoadAppSettings
 
 # 尽量加载 backend/.env
 try:
@@ -47,12 +48,13 @@ except Exception:
 # =========================
 # 配置
 # =========================
-ASR_HOST = os.getenv("ASR_HOST", "0.0.0.0")
-ASR_PORT = 8006  # 新端口
+Settings = LoadAppSettings().Asr
+ASR_HOST = Settings.Host
+ASR_PORT = Settings.Port
 
-DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY") or os.getenv("DASH_SCOPE_API_KEY")
-DASHSCOPE_ASR_MODEL = os.getenv("DASHSCOPE_ASR_MODEL", "qwen3-asr-flash")
-DASHSCOPE_ASR_FALLBACK_MODEL = os.getenv("DASHSCOPE_ASR_FALLBACK_MODEL", "paraformer-realtime-v1")
+DASHSCOPE_API_KEY = Settings.DashScopeApiKey
+DASHSCOPE_ASR_MODEL = Settings.PrimaryModel
+DASHSCOPE_ASR_FALLBACK_MODEL = Settings.FallbackModel
 
 PCM_SAMPLE_RATE = 16000
 PCM_CHANNELS = 1

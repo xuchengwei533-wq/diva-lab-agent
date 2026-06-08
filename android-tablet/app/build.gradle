@@ -1,0 +1,27 @@
+plugins {
+    id "com.android.application"
+}
+
+android {
+    namespace "com.maozhishi.tablet"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.maozhishi.tablet"
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName "0.1.0"
+        buildConfigField "String", "DEFAULT_PAGE_URL", "\"http://192.168.1.100:8000/mao_demo.html?apiHost=192.168.1.100&live2dPort=8010\""
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+

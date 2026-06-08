@@ -148,12 +148,71 @@
     <div class="left-stage">
       <!-- 载入 live2d -->
       <script>
-        (function () {
+        window.DivaDeployment = (function () {
           const params = new URLSearchParams(location.search || '');
-          const host = (location && location.hostname) ? location.hostname : 'localhost';
-          const live2dPort = params.get('live2dPort');
-          const base = live2dPort ? `${location.protocol}//${host}:${live2dPort}` : location.origin;
-          window.__LIVE2D_ASSET_BASE__ = base;
+          const storagePrefix = 'diva.';
+          const clean = (value) => (value || '').trim().replace(/\/+$/, '');
+          const fromConfig = (name, fallback) => {
+            const value = clean(params.get(name) || localStorage.getItem(storagePrefix + name));
+            if (value) localStorage.setItem(storagePrefix + name, value);
+            return value || fallback;
+          };
+          const isLocalFile = location.protocol === 'file:' || location.protocol === 'content:';
+          const pageHost = location.hostname || 'localhost';
+          const backendHost = fromConfig(
+            'apiHost',
+            fromConfig('backendHost', isLocalFile ? 'localhost' : pageHost)
+          );
+          const apiProtocol = fromConfig(
+            'apiProtocol',
+            location.protocol === 'https:' ? 'https' : 'http'
+          );
+          const live2dHost = fromConfig('live2dHost', fromConfig('assetHost', backendHost || pageHost));
+          const live2dProtocol = fromConfig('live2dProtocol', apiProtocol);
+          const getPort = (name, fallback) => fromConfig(name, String(fallback));
+          const configuredLive2dBase = clean(
+            params.get('live2dBase') || localStorage.getItem(storagePrefix + 'live2dBase')
+          );
+          const useRemoteLive2dBase =
+            isLocalFile ||
+            params.has('live2dPort') ||
+            params.has('live2dHost') ||
+            params.has('assetHost') ||
+            Boolean(configuredLive2dBase);
+          const live2dBase =
+            configuredLive2dBase ||
+            (useRemoteLive2dBase
+              ? `${live2dProtocol}://${live2dHost}:${getPort('live2dPort', 8010)}`
+              : location.origin);
+          const passThroughKeys = [
+            'apiHost',
+            'backendHost',
+            'apiProtocol',
+            'wsProtocol',
+            'chatPort',
+            'ttsPort',
+            'scoringPort',
+            'asrPort',
+            'live2dHost',
+            'assetHost',
+            'live2dProtocol',
+            'live2dPort',
+            'live2dBase'
+          ];
+          const buildPageUrl = (pageName) => {
+            const next = new URLSearchParams();
+            passThroughKeys.forEach((key) => {
+              if (params.has(key)) next.set(key, params.get(key));
+            });
+            const query = next.toString();
+            return query ? `${pageName}?${query}` : pageName;
+          };
+          return { live2dBaseUrl: live2dBase, buildPageUrl };
+        })();
+      </script>
+      <script>
+        (function () {
+          window.__LIVE2D_ASSET_BASE__ = window.DivaDeployment.live2dBaseUrl;
           document.write('<script src="https://unpkg.com/oh-my-live2d@0.19.3/dist/index.min.js"><\/script>');
         })();
       </script>
@@ -182,11 +241,8 @@
     // ====== 1) 初始化 Live2D（基本沿用你原来的配置） ======
     const LIVE2D_ASSET_BASE = window.__LIVE2D_ASSET_BASE__ || location.origin;
     (function () {
-      const params = new URLSearchParams(location.search || '');
-      const live2dPort = params.get('live2dPort');
-      if (!live2dPort) return;
       const link = document.querySelector('.chat-link-btn');
-      if (link) link.href = `chat_interface.html?live2dPort=${encodeURIComponent(live2dPort)}`;
+      if (link) link.href = window.DivaDeployment.buildPageUrl('chat_interface.html');
     })();
     const oml2d = OML2D.loadOml2d({
       importType: 'cubism5',

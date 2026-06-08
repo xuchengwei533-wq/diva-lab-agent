@@ -1,0 +1,2 @@
+"""DIVA backend application package."""
+

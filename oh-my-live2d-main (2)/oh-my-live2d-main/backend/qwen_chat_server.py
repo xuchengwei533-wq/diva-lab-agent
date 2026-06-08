@@ -11,16 +11,18 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from dashscope import Application
+from DivaApp.Configuration import LoadAppSettings
 
 # ---------- env ----------
 load_dotenv()  # 读取同目录 .env（或工作目录的 .env）
 
+Settings = LoadAppSettings().Chat
 DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY")
 if not DASHSCOPE_API_KEY:
     raise RuntimeError("Missing env DASHSCOPE_API_KEY. Please set it in .env or environment variables.")
 
 # 你的百炼智能体应用 ID
-BAILIAN_APP_ID = "4dc0700043fc46679e1568339e580678"
+BAILIAN_APP_ID = Settings.BailianAppId
 
 # ---------- app ----------
 app = FastAPI(title="Local Gateway for Bailian Agent App")
@@ -201,4 +203,4 @@ def api_chat(payload: ChatStreamRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("qwen_chat_server:app", host="0.0.0.0", port=8003, reload=False)
+    uvicorn.run("qwen_chat_server:app", host=Settings.Host, port=Settings.Port, reload=False)

@@ -1,8 +1,10 @@
-﻿from tts import *  # noqa: F401,F403
+from DivaApp.Configuration import LoadAppSettings
+from tts import *  # noqa: F401,F403
 from tts import app
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host='0.0.0.0', port=8004)
+    Settings = LoadAppSettings().Tts
+    uvicorn.run(app, host=Settings.Host, port=Settings.Port)

@@ -742,7 +742,7 @@
   </head>
 
   <body>
-    <a href="http://localhost:8000/mao_demo.html" class="back-link-btn"
+    <a href="mao_demo.html" class="back-link-btn"
       >🏠 返回主页</a
     >
 
@@ -1006,15 +1006,85 @@
 
     <!-- live2d（可选） -->
     <script>
-      (function () {
+      window.DivaDeployment = (function () {
         const params = new URLSearchParams(location.search || "");
-        const host =
-          location && location.hostname ? location.hostname : "localhost";
-        const live2dPort = params.get("live2dPort");
-        const base = live2dPort
-          ? `${location.protocol}//${host}:${live2dPort}`
-          : location.origin;
-        window.__LIVE2D_ASSET_BASE__ = base;
+        const storagePrefix = "diva.";
+        const clean = (value) => (value || "").trim().replace(/\/+$/, "");
+        const fromConfig = (name, fallback) => {
+          const value = clean(params.get(name) || localStorage.getItem(storagePrefix + name));
+          if (value) localStorage.setItem(storagePrefix + name, value);
+          return value || fallback;
+        };
+        const isLocalFile = location.protocol === "file:" || location.protocol === "content:";
+        const pageHost = location.hostname || "localhost";
+        const backendHost = fromConfig(
+          "apiHost",
+          fromConfig("backendHost", isLocalFile ? "localhost" : pageHost),
+        );
+        const apiProtocol = fromConfig(
+          "apiProtocol",
+          location.protocol === "https:" ? "https" : "http",
+        );
+        const wsProtocol = fromConfig("wsProtocol", apiProtocol === "https" ? "wss" : "ws");
+        const live2dHost = fromConfig("live2dHost", fromConfig("assetHost", backendHost || pageHost));
+        const live2dProtocol = fromConfig("live2dProtocol", apiProtocol);
+        const getPort = (name, fallback) => fromConfig(name, String(fallback));
+        const serviceBase = (portName, fallbackPort) =>
+          `${apiProtocol}://${backendHost}:${getPort(portName, fallbackPort)}`;
+        const configuredLive2dBase = clean(
+          params.get("live2dBase") || localStorage.getItem(storagePrefix + "live2dBase"),
+        );
+        const useRemoteLive2dBase =
+          isLocalFile ||
+          params.has("live2dPort") ||
+          params.has("live2dHost") ||
+          params.has("assetHost") ||
+          Boolean(configuredLive2dBase);
+        const live2dBase =
+          configuredLive2dBase ||
+          (useRemoteLive2dBase
+            ? `${live2dProtocol}://${live2dHost}:${getPort("live2dPort", 8010)}`
+            : location.origin);
+        const passThroughKeys = [
+          "apiHost",
+          "backendHost",
+          "apiProtocol",
+          "wsProtocol",
+          "chatPort",
+          "ttsPort",
+          "scoringPort",
+          "asrPort",
+          "live2dHost",
+          "assetHost",
+          "live2dProtocol",
+          "live2dPort",
+          "live2dBase",
+        ];
+        const buildPageUrl = (pageName) => {
+          const next = new URLSearchParams();
+          passThroughKeys.forEach((key) => {
+            if (params.has(key)) next.set(key, params.get(key));
+          });
+          const query = next.toString();
+          return query ? `${pageName}?${query}` : pageName;
+        };
+        return {
+          backendHost,
+          apiProtocol,
+          wsProtocol,
+          scoringBaseUrl: serviceBase("scoringPort", 8005),
+          asrBaseUrl: serviceBase("asrPort", 8006),
+          chatBaseUrl: serviceBase("chatPort", 8003),
+          ttsBaseUrl: serviceBase("ttsPort", 8004),
+          live2dBaseUrl: live2dBase,
+          buildPageUrl,
+        };
+      })();
+    </script>
+
+    <script>
+      (function () {
+        window.__LIVE2D_ASSET_BASE__ = window.DivaDeployment.live2dBaseUrl;
         document.write(
           '<script src="https://unpkg.com/oh-my-live2d@0.19.3/dist/index.min.js"><\/script>',
         );
@@ -1027,16 +1097,15 @@
       // =========================
       // 后端地址配置
       // =========================
-      const HOST =
-        location && location.hostname ? location.hostname : "localhost";
-      const API_BASE = `http://${HOST}:8005`; // 评分服务 (asr_server.py)
-      const VOICE_API_URL = `http://${HOST}:8006`; // ASR 服务 (asr_new.py)
-      const CHAT_API_URL = `http://${HOST}:8003`;
-      const TTS_REST_URL = `http://${HOST}:8004/api/tts/speak`;
-      const TTS_TOTAL_URL = `http://${HOST}:8004/api/tts-total/speak`;
-      const TTS_TOTAL_RANDOM_WAV_URL = `http://${HOST}:8004/api/tts-total/random-wav`;
+      const HOST = window.DivaDeployment.backendHost;
+      const API_BASE = window.DivaDeployment.scoringBaseUrl; // scoring service (asr_server.py)
+      const VOICE_API_URL = window.DivaDeployment.asrBaseUrl; // ASR service (asr_new.py)
+      const CHAT_API_URL = window.DivaDeployment.chatBaseUrl;
+      const TTS_REST_URL = `${window.DivaDeployment.ttsBaseUrl}/api/tts/speak`;
+      const TTS_TOTAL_URL = `${window.DivaDeployment.ttsBaseUrl}/api/tts-total/speak`;
+      const TTS_TOTAL_RANDOM_WAV_URL = `${window.DivaDeployment.ttsBaseUrl}/api/tts-total/random-wav`;
       const TTS_OUTPUT_MODE = 1; // 1 = 原来的 WebSocket 流式 TTS, 2 = 新的 TTS-total 完整 MP3 TTS
-      const CHARACTER_RENDER_MODE = 1; // 2 = Live2D, 1 = GIF
+      const CHARACTER_RENDER_MODE = 4; // 1 = GIF, 2 = Live2D, 3 = 带帽子的 Live2D, 4 = mao Live2D
       const CHARACTER_GIF_TALKING_URL = `/packages/gif/download%20(3).gif`;
       const CHARACTER_GIF_IDLE_URL = `/packages/gif/download%20(4).gif`;
       const CHARACTER_GIF_TALKING_CYCLE_MS = 2200;
@@ -1045,9 +1114,9 @@
       // =========================
       // 流式 TTS
       // =========================
-      const TTS_WS_URL = `${
-        location.protocol === "https:" ? "wss" : "ws"
-      }://${HOST}:8004/ws/tts?voice=Ethan&model=qwen3-tts-flash&language_type=Chinese`;
+      const TTS_WS_URL = `${window.DivaDeployment.wsProtocol}://${HOST}:${
+        new URL(window.DivaDeployment.ttsBaseUrl).port || "8004"
+      }/ws/tts?voice=Ethan&model=qwen3-tts-flash&language_type=Chinese`;
       const TTS_SENTENCE_END_RE = /[。！？!?；;\n]/;
       const TTS_SOFT_PUNCT_RE = /[，,、：:]/;
       const MIN_TTS_SEGMENT_CHARS = 40;
@@ -1062,6 +1131,40 @@
 
       function isGifCharacterMode() {
         return Number(CHARACTER_RENDER_MODE) === 1;
+      }
+
+      (function bindBackLinkUrl() {
+        const backLink = document.querySelector(".back-link-btn");
+        if (backLink) backLink.href = window.DivaDeployment.buildPageUrl("mao_demo.html");
+      })();
+
+      function getCharacterLive2dModelConfig() {
+        const mode = Number(CHARACTER_RENDER_MODE);
+        if (mode === 3) {
+          return {
+            path: `/packages/oh-my-live2d/demo/public/hiyori/hiyori_free_t08.model3.json`,
+            scale: 0.22,
+            position: [0, 0],
+            showHitAreaFrames: false,
+            motionPreloadStrategy: "ALL",
+          };
+        }
+        if (mode === 4) {
+          return {
+            path: `/packages/oh-my-live2d/demo/public/mao/mao_pro.model3.json`,
+            scale: 0.2,
+            position: [0, 0],
+            showHitAreaFrames: false,
+            motionPreloadStrategy: "ALL",
+          };
+        }
+        return {
+          path: `/natori_pro_zh/runtime/natori_pro_t06.model3.json`,
+          scale: 0.18,
+          position: [0, 0],
+          showHitAreaFrames: false,
+          motionPreloadStrategy: "ALL",
+        };
       }
 
       let ttsEnabled = false;
@@ -2211,15 +2314,13 @@
         if (window.OML2D && !isGifCharacterMode()) {
           const LIVE2D_ASSET_BASE =
             window.__LIVE2D_ASSET_BASE__ || location.origin;
+          const live2dModel = getCharacterLive2dModelConfig();
           oml2d = OML2D.loadOml2d({
             importType: "cubism5",
             models: [
               {
-                path: `${LIVE2D_ASSET_BASE}/natori_pro_zh/runtime/natori_pro_t06.model3.json`,
-                scale: 0.18,
-                position: [0, 0],
-                showHitAreaFrames: false,
-                motionPreloadStrategy: "ALL",
+                ...live2dModel,
+                path: `${LIVE2D_ASSET_BASE}${live2dModel.path}`,
               },
             ],
             tips: {
@@ -2233,11 +2334,7 @@
       }
       refreshCharacterRenderMode();
       function goBack() {
-        const params = new URLSearchParams(location.search || "");
-        const live2dPort = params.get("live2dPort");
-        window.location.href = live2dPort
-          ? `mao_demo.html?live2dPort=${encodeURIComponent(live2dPort)}`
-          : "mao_demo.html";
+        window.location.href = window.DivaDeployment.buildPageUrl("mao_demo.html");
       }
       (function bindBackClick() {
         const container = document.getElementById("oml2d-container");
@@ -2316,7 +2413,7 @@
         },
       ];
 
-      const SCORE_RULE_PREFIX = "评分规则：1分最好，5分最差。\n";
+      const SCORE_RULE_PREFIX = "正常说话\n";
       function withScoreRule(text) {
         const t = text == null ? "" : String(text);
         if (!t.trim()) return t;
