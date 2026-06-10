@@ -1,0 +1,1202 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>全屏数字人</title>
+  <style>
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #05070a;
+      color: #17212b;
+      font-family: Arial, "Microsoft YaHei", sans-serif;
+      font-size: 16px;
+    }
+
+    button,
+    input {
+      font-family: Arial, "Microsoft YaHei", sans-serif;
+    }
+
+    #app {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #05070a;
+    }
+
+    #stage {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      overflow: hidden;
+      text-align: center;
+      background: #05070a;
+    }
+
+    #stageShade {
+      position: absolute;
+      left: 0;
+      right: 64px;
+      top: 0;
+      bottom: 0;
+      background: #05070a;
+    }
+
+    #character {
+      position: absolute;
+      left: 49%;
+      bottom: -2%;
+      width: auto;
+      height: 104%;
+      max-width: none;
+      max-height: 100%;
+      border: 0;
+      -webkit-transform: translateX(-50%);
+      transform: translateX(-50%);
+    }
+
+    #statusBadge {
+      position: absolute;
+      left: 14px;
+      top: 12px;
+      max-width: 62%;
+      padding: 8px 12px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.86);
+      color: #283746;
+      line-height: 1.35;
+      font-size: 14px;
+      box-shadow: 0 2px 10px rgba(25, 45, 63, 0.15);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      z-index: 3;
+    }
+
+    #caption {
+      position: absolute;
+      left: 14px;
+      right: 82px;
+      bottom: 14px;
+      max-height: 96px;
+      padding: 10px 12px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.9);
+      color: #17212b;
+      line-height: 1.5;
+      font-size: 15px;
+      overflow: hidden;
+      box-shadow: 0 2px 12px rgba(25, 45, 63, 0.18);
+      z-index: 3;
+    }
+
+    #dock {
+      position: absolute;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      width: 64px;
+      padding-top: 8px;
+      background: rgba(16, 24, 31, 0.94);
+      text-align: center;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      z-index: 8;
+    }
+
+    .dockButton {
+      display: block;
+      width: 48px;
+      height: 48px;
+      margin: 7px auto;
+      padding: 0;
+      border: 1px solid rgba(255, 255, 255, 0.26);
+      border-radius: 6px;
+      background: #f5f8fb;
+      color: #17212b;
+      font-size: 17px;
+      font-weight: bold;
+      line-height: 48px;
+      text-align: center;
+    }
+
+    .dockButton:disabled {
+      background: #8ea0b0;
+      color: #e7eef5;
+    }
+
+    .dockButtonActive {
+      background: #1f6feb;
+      color: #ffffff;
+      border-color: #1f6feb;
+    }
+
+    #chatPanel {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      right: -430px;
+      width: 360px;
+      background: rgba(250, 252, 254, 0.96);
+      border-left: 1px solid rgba(130, 148, 166, 0.45);
+      box-shadow: -6px 0 18px rgba(20, 31, 42, 0.18);
+      z-index: 6;
+      -webkit-transition: right 180ms ease;
+      transition: right 180ms ease;
+    }
+
+    #app.panel-open #chatPanel {
+      right: 64px;
+    }
+
+    #panelHead {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      height: 48px;
+      border-bottom: 1px solid #d4dde6;
+      background: #ffffff;
+    }
+
+    #panelTitle {
+      position: absolute;
+      left: 14px;
+      top: 0;
+      height: 48px;
+      line-height: 48px;
+      font-size: 16px;
+      font-weight: bold;
+      color: #17212b;
+    }
+
+    #closePanel {
+      position: absolute;
+      right: 8px;
+      top: 7px;
+      width: 42px;
+      height: 34px;
+      border: 1px solid #b9c6d1;
+      border-radius: 5px;
+      background: #f5f8fb;
+      color: #17212b;
+      font-size: 18px;
+      font-weight: bold;
+    }
+
+    #messages {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 49px;
+      bottom: 98px;
+      padding: 12px;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .msg {
+      margin: 0 0 10px;
+      padding: 9px 10px;
+      line-height: 1.45;
+      border-radius: 6px;
+      word-break: break-word;
+      white-space: pre-wrap;
+      font-size: 14px;
+    }
+
+    .user {
+      background: #e4efff;
+      color: #143b70;
+    }
+
+    .bot {
+      background: #eef3f6;
+      color: #26313d;
+    }
+
+    .sys {
+      background: #fff4cf;
+      color: #574112;
+    }
+
+    #composer {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 98px;
+      padding: 10px;
+      border-top: 1px solid #d4dde6;
+      background: #ffffff;
+      box-sizing: border-box;
+    }
+
+    #input {
+      width: 70%;
+      height: 42px;
+      padding: 8px;
+      border: 1px solid #aebdca;
+      border-radius: 5px;
+      font-size: 16px;
+      box-sizing: border-box;
+      vertical-align: top;
+    }
+
+    #send {
+      width: 27%;
+      height: 42px;
+      margin-left: 2%;
+      border: 0;
+      border-radius: 5px;
+      background: #1f6feb;
+      color: #ffffff;
+      font-size: 16px;
+      font-weight: bold;
+      vertical-align: top;
+    }
+
+    #send:disabled {
+      background: #8ea0b0;
+    }
+
+    #miniStatus {
+      margin-top: 8px;
+      color: #526373;
+      font-size: 13px;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    @media screen and (max-width: 720px) {
+      #stageShade {
+        right: 56px;
+      }
+
+      #character {
+        left: 43%;
+        height: 100%;
+      }
+
+      #dock {
+        width: 56px;
+      }
+
+      .dockButton {
+        width: 42px;
+        height: 42px;
+        line-height: 42px;
+        margin: 6px auto;
+        font-size: 16px;
+      }
+
+      #chatPanel {
+        width: 300px;
+        right: -360px;
+      }
+
+      #app.panel-open #chatPanel {
+        right: 56px;
+      }
+
+      #caption {
+        right: 70px;
+      }
+    }
+
+    @media screen and (max-width: 430px) {
+      #character {
+        left: 38%;
+      }
+
+      #chatPanel {
+        width: 260px;
+        right: -320px;
+      }
+
+      #caption {
+        left: 8px;
+        right: 64px;
+        bottom: 8px;
+        font-size: 14px;
+      }
+
+      #statusBadge {
+        left: 8px;
+        top: 8px;
+        max-width: 64%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app" class="panel-closed">
+    <div id="stage">
+      <div id="stageShade"></div>
+      <img id="character" alt="" src="/packages/gif/%E5%BE%85%E6%9C%BA.gif">
+    </div>
+
+    <div id="statusBadge">正在连接...</div>
+    <div id="caption">我是肖斯塔科维奇，欢迎走进我的故事</div>
+
+    <div id="chatPanel">
+      <div id="panelHead">
+        <div id="panelTitle">对话</div>
+        <button id="closePanel" type="button" title="收起">×</button>
+      </div>
+      <div id="messages">
+        <div class="msg bot">我是肖斯塔科维奇，欢迎走进我的故事</div>
+      </div>
+      <div id="composer">
+        <input id="input" type="text" autocomplete="off" placeholder="输入文字">
+        <button id="send" type="button">发送</button>
+        <div id="miniStatus">等待输入</div>
+      </div>
+    </div>
+
+    <div id="dock">
+      <button id="toggleChat" class="dockButton dockButtonActive" type="button" title="对话">聊</button>
+      <button id="sendDock" class="dockButton" type="button" title="发送">发</button>
+      <button id="mic" class="dockButton" type="button" title="语音">麦</button>
+      <button id="mute" class="dockButton" type="button" title="静音">静</button>
+      <button id="replay" class="dockButton" type="button" title="重播">复</button>
+      <button id="stop" class="dockButton" type="button" title="停止">停</button>
+      <button id="clear" class="dockButton" type="button" title="清屏">清</button>
+      <button id="fullscreen" class="dockButton" type="button" title="全屏">全</button>
+      <button id="reload" class="dockButton" type="button" title="刷新">刷</button>
+    </div>
+  </div>
+  <audio id="player" preload="none"></audio>
+
+  <script>
+    (function () {
+      var params = parseQuery(location.search);
+      var originBase = getOrigin();
+      var singleOrigin = truthy(getParam("singleOrigin", "1")) || truthy(getParam("publicMode", "0"));
+      var host = getParam("apiHost", getParam("backendHost", location.hostname || "localhost"));
+      var protocol = getParam("apiProtocol", location.protocol === "https:" ? "https" : "http");
+      var assetHost = getParam("live2dHost", getParam("assetHost", host));
+      var assetProtocol = getParam("live2dProtocol", protocol);
+      var assetBase = singleOrigin ? originBase : getParam(
+        "live2dBase",
+        assetProtocol + "://" + assetHost + ":" + getParam("live2dPort", "8010")
+      );
+      var chatUrl = apiBase("chatPort", "8003") + "/api/chat";
+      var ttsUrl = apiBase("ttsPort", "8004") + "/api/tts/speak";
+      var preludeAudioUrl = apiBase("ttsPort", "8004") + "/api/tts-total/random-wav";
+      var asrUrl = apiBase("asrPort", "8006") + "/api/voice/start";
+      var idleGif = assetBase + "/packages/gif/%E5%BE%85%E6%9C%BA.gif";
+      var talkingGif = assetBase + "/packages/gif/%E8%AF%B4%E8%AF%9D.gif";
+      var preludeText = getParam("preludeText", "我是肖斯塔科维奇，欢迎走进我的故事");
+      var preludeEnabled = !truthy(getParam("disablePrelude", "0"));
+      var messages = [];
+      var busy = false;
+      var muted = false;
+      var lastAudioUrl = "";
+      var audioDoneCallback = null;
+      var nativeAudioFallbackUrl = "";
+      var nativeAudioActive = false;
+      var isRecording = false;
+      var nativeRecording = false;
+      var mediaRecorder = null;
+      var micStream = null;
+      var voiceChunks = [];
+      var audioContext = null;
+
+      var app = document.getElementById("app");
+      var character = document.getElementById("character");
+      var messagesEl = document.getElementById("messages");
+      var input = document.getElementById("input");
+      var send = document.getElementById("send");
+      var sendDock = document.getElementById("sendDock");
+      var statusBadge = document.getElementById("statusBadge");
+      var miniStatus = document.getElementById("miniStatus");
+      var caption = document.getElementById("caption");
+      var player = document.getElementById("player");
+      var toggleChat = document.getElementById("toggleChat");
+      var closePanel = document.getElementById("closePanel");
+      var mic = document.getElementById("mic");
+      var mute = document.getElementById("mute");
+      var replay = document.getElementById("replay");
+      var stop = document.getElementById("stop");
+      var clear = document.getElementById("clear");
+      var fullscreen = document.getElementById("fullscreen");
+      var reload = document.getElementById("reload");
+
+      character.src = idleGif;
+      setPanelOpen(false);
+      setStatus("已连接: " + (singleOrigin ? location.host : host));
+
+      toggleChat.onclick = function () { setPanelOpen(app.className !== "panel-open"); };
+      closePanel.onclick = function () { setPanelOpen(false); };
+      send.onclick = sendMessage;
+      sendDock.onclick = sendMessage;
+      mic.onclick = toggleRecording;
+      mute.onclick = toggleMute;
+      replay.onclick = replayAudio;
+      stop.onclick = stopAudio;
+      clear.onclick = clearConversation;
+      fullscreen.onclick = enterFullscreen;
+      reload.onclick = function () { location.reload(true); };
+
+      input.onkeydown = function (event) {
+        event = event || window.event;
+        if (event.keyCode === 13) {
+          sendMessage();
+          return false;
+        }
+        return true;
+      };
+
+      player.onplaying = function () {
+        setCharacterSpeaking(true);
+      };
+      player.onended = function () {
+        setCharacterSpeaking(false);
+        setStatus("已就绪");
+        finishAudioCallback();
+      };
+      player.onerror = function () {
+        setCharacterSpeaking(false);
+        setStatus("语音播放失败");
+        finishAudioCallback();
+      };
+
+      window.onNativeVoiceStatus = function (text) {
+        setStatus(text || "");
+      };
+      window.onNativeVoiceResult = function (base64Pcm, errorText) {
+        isRecording = false;
+        nativeRecording = false;
+        mic.innerHTML = "麦";
+        mic.className = "dockButton";
+        if (errorText) {
+          setStatus("录音失败: " + errorText);
+          return;
+        }
+        if (!base64Pcm) {
+          setStatus("录音为空，请重试");
+          return;
+        }
+        sendPcmToServer(base64Pcm);
+      };
+      window.onNativeAudioStatus = function (text) {
+        setStatus(text || "");
+      };
+      window.onNativeAudioEnded = function () {
+        nativeAudioActive = false;
+        nativeAudioFallbackUrl = "";
+        setCharacterSpeaking(false);
+        setStatus("已就绪");
+        finishAudioCallback();
+      };
+      window.onNativeAudioError = function (errorText) {
+        var fallbackUrl = nativeAudioFallbackUrl;
+        nativeAudioActive = false;
+        nativeAudioFallbackUrl = "";
+        if (fallbackUrl) {
+          playAudioElement(fallbackUrl);
+          return;
+        }
+        setCharacterSpeaking(false);
+        setStatus(errorText ? "语音播放失败: " + errorText : "语音播放失败");
+        finishAudioCallback();
+      };
+
+      function parseQuery(search) {
+        var out = {};
+        var raw = String(search || "").replace(/^\?/, "");
+        var pairs;
+        var i;
+        var part;
+        var eq;
+        var key;
+        var value;
+        if (!raw) return out;
+        pairs = raw.split("&");
+        for (i = 0; i < pairs.length; i += 1) {
+          part = pairs[i];
+          eq = part.indexOf("=");
+          key = eq >= 0 ? part.slice(0, eq) : part;
+          value = eq >= 0 ? part.slice(eq + 1) : "";
+          try {
+            key = decodeURIComponent(key.replace(/\+/g, " "));
+            value = decodeURIComponent(value.replace(/\+/g, " "));
+          } catch (ignore) {}
+          if (key) out[key] = value;
+        }
+        return out;
+      }
+
+      function clean(value) {
+        return String(value || "").replace(/\/+$/, "");
+      }
+
+      function getParam(name, fallback) {
+        var value = clean(params[name]);
+        return value || fallback;
+      }
+
+      function truthy(value) {
+        value = String(value || "").toLowerCase();
+        return value === "1" || value === "true" || value === "yes" || value === "on";
+      }
+
+      function getOrigin() {
+        var port = location.port ? ":" + location.port : "";
+        return location.protocol + "//" + location.hostname + port;
+      }
+
+      function apiBase(portName, fallbackPort) {
+        return singleOrigin ? originBase : serviceBase(portName, fallbackPort);
+      }
+
+      function serviceBase(portName, fallbackPort) {
+        return protocol + "://" + host + ":" + getParam(portName, fallbackPort);
+      }
+
+      function setPanelOpen(open) {
+        app.className = open ? "panel-open" : "panel-closed";
+        toggleChat.className = open ? "dockButton dockButtonActive" : "dockButton";
+        if (open) {
+          setTimeout(function () {
+            try { input.focus(); } catch (ignore) {}
+          }, 50);
+        }
+      }
+
+      function setStatus(text) {
+        var safe = escapeHtml(text || "");
+        statusBadge.innerHTML = safe;
+        miniStatus.innerHTML = safe;
+      }
+
+      function setCaption(text) {
+        caption.innerHTML = escapeHtml(text || "");
+      }
+
+      function setBusy(nextBusy) {
+        busy = !!nextBusy;
+        send.disabled = busy;
+        sendDock.disabled = busy;
+        input.disabled = busy;
+      }
+
+      function setCharacterSpeaking(speaking) {
+        character.src = speaking ? talkingGif : idleGif;
+      }
+
+      function addMessage(kind, text) {
+        var div = document.createElement("div");
+        div.className = "msg " + kind;
+        div.innerHTML = escapeHtml(text || "");
+        messagesEl.appendChild(div);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+        if (kind === "bot" || kind === "sys") {
+          setCaption(text || "");
+        }
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function requestJson(url, payload, timeoutMs, callback) {
+        var xhr = new XMLHttpRequest();
+        xhr.open("POST", url, true);
+        xhr.timeout = timeoutMs || 120000;
+        xhr.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+        xhr.onreadystatechange = function () {
+          var data;
+          if (xhr.readyState !== 4) return;
+          if (xhr.status < 200 || xhr.status >= 300) {
+            callback(new Error("HTTP " + xhr.status + ": " + (xhr.responseText || "")));
+            return;
+          }
+          try {
+            data = JSON.parse(xhr.responseText || "{}");
+          } catch (error) {
+            callback(new Error("JSON 解析失败"));
+            return;
+          }
+          callback(null, data);
+        };
+        xhr.onerror = function () {
+          callback(new Error("网络连接失败"));
+        };
+        xhr.ontimeout = function () {
+          callback(new Error("请求超时"));
+        };
+        xhr.send(JSON.stringify(payload || {}));
+      }
+
+      function requestGetJson(url, timeoutMs, callback) {
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", url, true);
+        xhr.timeout = timeoutMs || 30000;
+        xhr.onreadystatechange = function () {
+          var data;
+          if (xhr.readyState !== 4) return;
+          if (xhr.status < 200 || xhr.status >= 300) {
+            callback(new Error("HTTP " + xhr.status + ": " + (xhr.responseText || "")));
+            return;
+          }
+          try {
+            data = JSON.parse(xhr.responseText || "{}");
+          } catch (error) {
+            callback(new Error("JSON 解析失败"));
+            return;
+          }
+          callback(null, data);
+        };
+        xhr.onerror = function () {
+          callback(new Error("网络连接失败"));
+        };
+        xhr.ontimeout = function () {
+          callback(new Error("请求超时"));
+        };
+        xhr.send(null);
+      }
+
+      function sendMessage() {
+        var text = input.value.replace(/^\s+|\s+$/g, "");
+        if (busy) return;
+        if (!text) {
+          setPanelOpen(true);
+          setStatus("等待输入");
+          return;
+        }
+
+        input.value = "";
+        addMessage("user", text);
+        setCaption(text);
+        setBusy(true);
+        if (preludeEnabled && preludeText) {
+          addMessage("bot", preludeText);
+          setStatus("正在播放开场白...");
+          playPrelude(function () {
+            requestChatReply(text);
+          });
+        } else {
+          requestChatReply(text);
+        }
+      }
+
+      function playPrelude(callback) {
+        var done = once(callback);
+        if (muted) {
+          setStatus("静音中");
+          done();
+          return;
+        }
+        requestGetJson(preludeAudioUrl, 20000, function (error, data) {
+          var audioUrl;
+          if (!error && data && data.audio_url) {
+            audioUrl = resolveAudioUrl(data.audio_url);
+            lastAudioUrl = audioUrl;
+            playAudio(audioUrl, done);
+            return;
+          }
+          speak(preludeText, done);
+        });
+      }
+
+      function requestChatReply(text) {
+        var history;
+        setStatus("正在请求数字人...");
+        history = messages.slice(0);
+        history.push({ role: "user", content: text });
+        requestJson(chatUrl, { model: "ignored", messages: history }, 120000, function (error, data) {
+          var reply;
+          setBusy(false);
+          if (error) {
+            addMessage("sys", "聊天服务失败: " + error.message);
+            setStatus("聊天服务失败");
+            return;
+          }
+
+          reply = data && (data.text || data.message || data.reply);
+          if (!reply) {
+            addMessage("sys", "聊天服务没有返回文字");
+            setStatus("聊天服务没有返回文字");
+            return;
+          }
+
+          addMessage("bot", reply);
+          messages.push({ role: "user", content: text });
+          messages.push({ role: "assistant", content: reply });
+          while (messages.length > 10) messages.shift();
+          speak(reply);
+        });
+      }
+
+      function speak(text, callback) {
+        var done = once(callback);
+        if (!text) {
+          done();
+          return;
+        }
+        if (muted) {
+          setStatus("静音中");
+          setCharacterSpeaking(false);
+          done();
+          return;
+        }
+        setStatus("正在合成语音...");
+        requestJson(ttsUrl, { text: text, voice_type: "deep_male" }, 90000, function (error, data) {
+          var audioUrl;
+          if (error) {
+            setStatus("语音服务失败");
+            setCharacterSpeaking(false);
+            done();
+            return;
+          }
+          if (data.audio_url) {
+            audioUrl = resolveAudioUrl(data.audio_url);
+          } else if (data.audio_base64) {
+            audioUrl = "data:" + mimeFromFormat(data.format) + ";base64," + data.audio_base64;
+          }
+          if (!audioUrl) {
+            setStatus("语音服务没有返回音频");
+            setCharacterSpeaking(false);
+            done();
+            return;
+          }
+          lastAudioUrl = audioUrl;
+          playAudio(audioUrl, done);
+        });
+      }
+
+      function once(callback) {
+        var called = false;
+        return function () {
+          if (called) return;
+          called = true;
+          if (callback) callback();
+        };
+      }
+
+      function resolveAudioUrl(url) {
+        var sameOrigin;
+        if (/^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?\//i.test(url)) {
+          return url.replace(
+            /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?/i,
+            apiBase("ttsPort", "8004")
+          );
+        }
+        sameOrigin = normalizeSameOriginUrl(url);
+        if (sameOrigin) return sameOrigin;
+        if (singleOrigin && /^http:\/\//i.test(url)) {
+          return originBase + "/proxy-audio?url=" + encodeURIComponent(url);
+        }
+        if (/^https?:\/\//i.test(url)) return url;
+        if (url.charAt(0) === "/") return apiBase("ttsPort", "8004") + url;
+        return apiBase("ttsPort", "8004") + "/" + url;
+      }
+
+      function normalizeSameOriginUrl(url) {
+        var anchor;
+        if (!singleOrigin || !/^https?:\/\//i.test(url)) return "";
+        try {
+          anchor = document.createElement("a");
+          anchor.href = url;
+          if (anchor.hostname === location.hostname) {
+            return originBase + anchor.pathname + anchor.search;
+          }
+        } catch (ignore) {}
+        return "";
+      }
+
+      function mimeFromFormat(format) {
+        var value = String(format || "").toLowerCase();
+        if (value.indexOf("mp3") >= 0 || value.indexOf("mpeg") >= 0) return "audio/mpeg";
+        if (value.indexOf("wav") >= 0) return "audio/wav";
+        if (value.indexOf("ogg") >= 0) return "audio/ogg";
+        return "audio/wav";
+      }
+
+      function finishAudioCallback() {
+        var callback = audioDoneCallback;
+        audioDoneCallback = null;
+        if (callback) callback();
+      }
+
+      function playAudio(url, callback) {
+        audioDoneCallback = callback || null;
+        nativeAudioFallbackUrl = "";
+        setCharacterSpeaking(true);
+        setStatus("正在播放语音...");
+        if (window.AndroidAudio && window.AndroidAudio.playUrl && url.indexOf("data:") !== 0) {
+          try {
+            nativeAudioActive = true;
+            nativeAudioFallbackUrl = url;
+            window.AndroidAudio.playUrl(url);
+            return;
+          } catch (nativeError) {
+            nativeAudioActive = false;
+            nativeAudioFallbackUrl = "";
+          }
+        }
+        playAudioElement(url);
+      }
+
+      function playAudioElement(url) {
+        var playResult;
+        try {
+          player.pause();
+          player.src = url;
+          player.load();
+          playResult = player.play();
+          if (playResult && playResult.catch) {
+            playResult.catch(function () {
+              setCharacterSpeaking(false);
+              setStatus("语音播放失败");
+              finishAudioCallback();
+            });
+          }
+        } catch (error) {
+          setCharacterSpeaking(false);
+          setStatus("语音播放失败");
+          finishAudioCallback();
+        }
+      }
+
+      function stopAudio() {
+        nativeAudioFallbackUrl = "";
+        nativeAudioActive = false;
+        try {
+          if (window.AndroidAudio && window.AndroidAudio.stop) {
+            window.AndroidAudio.stop();
+          }
+        } catch (nativeError) {}
+        try {
+          player.pause();
+          player.removeAttribute("src");
+          player.load();
+        } catch (ignore) {}
+        setCharacterSpeaking(false);
+        setStatus("已停止");
+        finishAudioCallback();
+      }
+
+      function replayAudio() {
+        if (!lastAudioUrl) {
+          setStatus("暂无可重播语音");
+          return;
+        }
+        if (muted) {
+          setStatus("静音中");
+          return;
+        }
+        playAudio(lastAudioUrl);
+      }
+
+      function toggleMute() {
+        muted = !muted;
+        mute.innerHTML = muted ? "声" : "静";
+        mute.className = muted ? "dockButton dockButtonActive" : "dockButton";
+        if (muted) {
+          stopAudio();
+          setStatus("静音中");
+        } else {
+          setStatus("已取消静音");
+        }
+      }
+
+      function resetMessages() {
+        var div = document.createElement("div");
+        messagesEl.innerHTML = "";
+        div.className = "msg bot";
+        div.innerHTML = escapeHtml(preludeText);
+        messagesEl.appendChild(div);
+      }
+
+      function clearConversation() {
+        messages = [];
+        resetMessages();
+        setCaption(preludeText);
+        setStatus("已清屏");
+      }
+
+      function enterFullscreen() {
+        var el = document.documentElement;
+        var fn = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+        if (fn) {
+          try {
+            fn.call(el);
+            setStatus("已全屏");
+          } catch (error) {
+            setStatus("当前已经是全屏");
+          }
+        } else {
+          setStatus("当前已经是全屏");
+        }
+      }
+
+      function toggleRecording() {
+        if (busy) {
+          setStatus("数字人回复中，请稍等");
+          return;
+        }
+        if (isRecording) {
+          stopRecording();
+        } else {
+          startRecording();
+        }
+      }
+
+      function startRecording() {
+        var options;
+        if (window.AndroidVoice && window.AndroidVoice.start) {
+          setPanelOpen(true);
+          isRecording = true;
+          nativeRecording = true;
+          mic.innerHTML = "止";
+          mic.className = "dockButton dockButtonActive";
+          setStatus("正在启动原生录音...");
+          try {
+            window.AndroidVoice.start();
+            return;
+          } catch (nativeError) {
+            isRecording = false;
+            nativeRecording = false;
+            mic.innerHTML = "麦";
+            mic.className = "dockButton";
+            setStatus("原生录音不可用，尝试网页录音");
+          }
+        }
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof window.MediaRecorder === "undefined") {
+          setPanelOpen(true);
+          setStatus("当前 WebView 不支持录音");
+          return;
+        }
+        setPanelOpen(true);
+        setStatus("正在请求麦克风...");
+        navigator.mediaDevices.getUserMedia({
+          audio: {
+            channelCount: 1,
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: true
+          }
+        }).then(function (stream) {
+          micStream = stream;
+          voiceChunks = [];
+          options = chooseRecorderOptions();
+          try {
+            mediaRecorder = new MediaRecorder(stream, options);
+          } catch (error) {
+            releaseMicStream();
+            setStatus("录音器启动失败: " + error.message);
+            return;
+          }
+          mediaRecorder.ondataavailable = function (event) {
+            if (event.data && event.data.size > 0) voiceChunks.push(event.data);
+          };
+          mediaRecorder.onerror = function () {
+            setStatus("录音失败");
+            stopRecording();
+          };
+          mediaRecorder.onstop = handleRecordingStopped;
+          try {
+            mediaRecorder.start();
+            isRecording = true;
+            mic.innerHTML = "止";
+            mic.className = "dockButton dockButtonActive";
+            setStatus("录音中，再点麦克风停止");
+          } catch (error2) {
+            releaseMicStream();
+            setStatus("录音无法启动: " + error2.message);
+          }
+        })["catch"](function (error3) {
+          releaseMicStream();
+          setStatus("麦克风不可用: " + error3.message);
+        });
+      }
+
+      function stopRecording() {
+        isRecording = false;
+        mic.innerHTML = "麦";
+        mic.className = "dockButton";
+        if (nativeRecording) {
+          nativeRecording = false;
+          try {
+            window.AndroidVoice.stop();
+            setStatus("识别中...");
+          } catch (nativeError) {
+            setStatus("原生录音停止失败: " + nativeError.message);
+          }
+          return;
+        }
+        if (mediaRecorder && mediaRecorder.state !== "inactive") {
+          try {
+            mediaRecorder.stop();
+            setStatus("识别中...");
+          } catch (error) {
+            releaseMicStream();
+            setStatus("录音停止失败: " + error.message);
+          }
+        } else {
+          releaseMicStream();
+        }
+      }
+
+      function chooseRecorderOptions() {
+        var options = {};
+        if (window.MediaRecorder && MediaRecorder.isTypeSupported) {
+          if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
+            options.mimeType = "audio/webm;codecs=opus";
+          } else if (MediaRecorder.isTypeSupported("audio/webm")) {
+            options.mimeType = "audio/webm";
+          } else if (MediaRecorder.isTypeSupported("audio/ogg;codecs=opus")) {
+            options.mimeType = "audio/ogg;codecs=opus";
+          }
+        }
+        return options;
+      }
+
+      function handleRecordingStopped() {
+        var blobType = mediaRecorder && mediaRecorder.mimeType ? mediaRecorder.mimeType : "audio/webm";
+        var audioBlob;
+        isRecording = false;
+        mic.innerHTML = "麦";
+        mic.className = "dockButton";
+        releaseMicStream();
+        if (!voiceChunks.length) {
+          setStatus("录音为空，请重试");
+          return;
+        }
+        audioBlob = new Blob(voiceChunks, { type: blobType });
+        voiceChunks = [];
+        setStatus("正在转换音频...");
+        blobToPcm16k(audioBlob, function (error, pcmBuffer) {
+          if (error) {
+            setStatus("音频处理失败: " + error.message);
+            return;
+          }
+          sendPcmToServer(arrayBufferToBase64(pcmBuffer));
+        });
+      }
+
+      function releaseMicStream() {
+        var tracks;
+        var i;
+        if (!micStream) return;
+        tracks = micStream.getTracks ? micStream.getTracks() : [];
+        for (i = 0; i < tracks.length; i += 1) {
+          try { tracks[i].stop(); } catch (ignore) {}
+        }
+        micStream = null;
+      }
+
+      function blobToPcm16k(audioBlob, callback) {
+        var reader = new FileReader();
+        reader.onerror = function () {
+          callback(new Error("读取录音失败"));
+        };
+        reader.onload = function () {
+          decodeAudioToPcm(reader.result, callback);
+        };
+        reader.readAsArrayBuffer(audioBlob);
+      }
+
+      function decodeAudioToPcm(arrayBuffer, callback) {
+        var AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) {
+          callback(new Error("当前 WebView 不支持音频解码"));
+          return;
+        }
+        try {
+          if (!audioContext) audioContext = new AudioCtx();
+          audioContext.decodeAudioData(arrayBuffer, function (decoded) {
+            callback(null, resampleToPcm16(decoded, 16000));
+          }, function () {
+            callback(new Error("录音解码失败"));
+          });
+        } catch (error) {
+          callback(error);
+        }
+      }
+
+      function resampleToPcm16(decoded, targetRate) {
+        var sourceRate = decoded.sampleRate || targetRate;
+        var source = decoded.getChannelData(0);
+        var targetLength = Math.max(1, Math.round(source.length * targetRate / sourceRate));
+        var buffer = new ArrayBuffer(targetLength * 2);
+        var view = new DataView(buffer);
+        var ratio = sourceRate / targetRate;
+        var i;
+        var pos;
+        var left;
+        var right;
+        var frac;
+        var sample;
+        var intSample;
+        for (i = 0; i < targetLength; i += 1) {
+          pos = i * ratio;
+          left = Math.floor(pos);
+          right = Math.min(left + 1, source.length - 1);
+          frac = pos - left;
+          sample = source[left] * (1 - frac) + source[right] * frac;
+          if (sample > 1) sample = 1;
+          if (sample < -1) sample = -1;
+          intSample = sample < 0 ? sample * 32768 : sample * 32767;
+          view.setInt16(i * 2, intSample, true);
+        }
+        return buffer;
+      }
+
+      function arrayBufferToBase64(buffer) {
+        var bytes = new Uint8Array(buffer);
+        var binary = "";
+        var chunkSize = 8192;
+        var i;
+        var end;
+        for (i = 0; i < bytes.length; i += chunkSize) {
+          end = Math.min(i + chunkSize, bytes.length);
+          binary += String.fromCharCode.apply(null, bytes.subarray(i, end));
+        }
+        return btoa(binary);
+      }
+
+      function sendPcmToServer(base64Pcm) {
+        setStatus("正在识别语音...");
+        requestJson(asrUrl, {
+          audio_data: base64Pcm,
+          audio_format: "pcm16le_16k_mono"
+        }, 45000, function (error, data) {
+          var text;
+          if (error) {
+            setStatus("语音识别失败: " + error.message);
+            return;
+          }
+          text = data && data.text ? String(data.text).replace(/^\s+|\s+$/g, "") : "";
+          if (!text) {
+            setStatus("没有识别到语音，请重试");
+            return;
+          }
+          input.value = text;
+          setPanelOpen(true);
+          setStatus("识别完成，已发送");
+          sendMessage();
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

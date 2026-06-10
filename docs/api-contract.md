@@ -18,13 +18,13 @@
 当前 `chat_interface.html` 直接使用这些地址：
 
 - `http://${HOST}:8003/api/chat/stream`
-- `ws://localhost:8004/ws/tts?voice=Cherry&model=qwen3-tts-flash&language_type=Chinese`
+- `ws://${HOST}:8004/ws/tts?voice=Cherry&model=qwen3-tts-flash&language_type=Chinese`
 - `http://${HOST}:8005/api/audio/score`
 - `http://${HOST}:8006/api/voice/start`
 
 这意味着：
 
-- TTS 目前仍硬编码 `localhost`
+- TTS WebSocket 当前通过页面部署参数中的 `apiHost` / `ttsPort` 生成
 - 页面没有统一 endpoint 配置模块
 - 第一阶段只记录现状，不改前端行为
 
@@ -473,7 +473,7 @@ data: {"type":"done"}
 
 ## Current Contract Risks
 
-- `TTS_WS_URL` 仍硬编码 `localhost:8004`
+- `TTS_WS_URL` 当前通过页面部署参数中的 `apiHost` / `ttsPort` 生成
 - `session.ready` 缺少 `sample_rate`、`format`
 - `qwen_chat_server.py` 仍硬编码 `BAILIAN_APP_ID`
 - 多个服务仍使用 `allow_origins=["*"]`

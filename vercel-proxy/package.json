@@ -1,0 +1,11 @@
+{
+  "name": "xiaosita-vercel-proxy",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "node -e \"console.log('vercel proxy build ok')\""
+  },
+  "engines": {
+    "node": "22.x"
+  }
+}

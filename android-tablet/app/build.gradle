@@ -5,14 +5,15 @@ plugins {
 android {
     namespace "com.maozhishi.tablet"
     compileSdk 35
+    buildToolsVersion "35.0.0"
 
     defaultConfig {
         applicationId "com.maozhishi.tablet"
-        minSdk 26
+        minSdk 21
         targetSdk 35
-        versionCode 1
-        versionName "0.1.0"
-        buildConfigField "String", "DEFAULT_PAGE_URL", "\"http://192.168.1.100:8000/mao_demo.html?apiHost=192.168.1.100&live2dPort=8010\""
+        versionCode 9
+        versionName "0.9.0-tunnel-refresh"
+        buildConfigField "String", "DEFAULT_PAGE_URL", "\"https://reporters-dealtime-defence-advised.trycloudflare.com/tablet_legacy.html?singleOrigin=1&legacy=1&lite=1&renderMode=gif&disableFace=1\""
     }
 
     buildFeatures {

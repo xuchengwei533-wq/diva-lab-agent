@@ -111,6 +111,28 @@
       pointer-events: auto;
     }
 
+    #legacy-character-layer {
+      position: absolute;
+      inset: 0;
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+      padding-bottom: 4vh;
+      pointer-events: none;
+    }
+
+    #legacy-character-layer.active {
+      display: flex;
+    }
+
+    #legacy-character-layer img {
+      width: auto;
+      max-width: 92%;
+      max-height: 84vh;
+      object-fit: contain;
+      display: block;
+    }
+
     /* 可选：让 hit area 红框不至于太刺眼 */
     /* .oml2d-hit-area-frame { opacity: 0.6; } */
 
@@ -139,20 +161,29 @@
 </head>
 
 <body>
-  <a href="chat_interface.html" class="chat-link-btn" target="_blank">
+  <a href="chat_interface.html" class="chat-link-btn" target="_self">
     对话界面
   </a>
 
   <div class="layout">
     <!-- 左侧：小人区域 -->
     <div class="left-stage">
+      <div id="legacy-character-layer" aria-hidden="true">
+        <img src="/packages/gif/%E5%BE%85%E6%9C%BA.gif" alt="" />
+      </div>
       <!-- 载入 live2d -->
       <script>
         window.DivaDeployment = (function () {
           const params = new URLSearchParams(location.search || '');
           const storagePrefix = 'diva.';
           const clean = (value) => (value || '').trim().replace(/\/+$/, '');
+          const truthy = (value) => ['1', 'true', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
           const fromConfig = (name, fallback) => {
+            const value = clean(params.get(name) || localStorage.getItem(storagePrefix + name));
+            if (value) localStorage.setItem(storagePrefix + name, value);
+            return value || fallback;
+          };
+          const optionFromConfig = (name, fallback) => {
             const value = clean(params.get(name) || localStorage.getItem(storagePrefix + name));
             if (value) localStorage.setItem(storagePrefix + name, value);
             return value || fallback;
@@ -184,6 +215,17 @@
             (useRemoteLive2dBase
               ? `${live2dProtocol}://${live2dHost}:${getPort('live2dPort', 8010)}`
               : location.origin);
+          const legacyMode =
+            truthy(optionFromConfig('legacy', '0')) ||
+            truthy(optionFromConfig('lite', '0'));
+          const renderMode = optionFromConfig(
+            'renderMode',
+            legacyMode ? 'gif' : 'live2d'
+          ).toLowerCase();
+          const disableLive2d =
+            legacyMode ||
+            renderMode === 'gif' ||
+            truthy(optionFromConfig('disableLive2d', '0'));
           const passThroughKeys = [
             'apiHost',
             'backendHost',
@@ -197,7 +239,13 @@
             'assetHost',
             'live2dProtocol',
             'live2dPort',
-            'live2dBase'
+            'live2dBase',
+            'legacy',
+            'lite',
+            'renderMode',
+            'disableFace',
+            'disableLive2d',
+            'ttsMode'
           ];
           const buildPageUrl = (pageName) => {
             const next = new URLSearchParams();
@@ -207,13 +255,21 @@
             const query = next.toString();
             return query ? `${pageName}?${query}` : pageName;
           };
-          return { live2dBaseUrl: live2dBase, buildPageUrl };
+          return {
+            live2dBaseUrl: live2dBase,
+            buildPageUrl,
+            legacyMode,
+            renderMode,
+            disableLive2d
+          };
         })();
       </script>
       <script>
         (function () {
           window.__LIVE2D_ASSET_BASE__ = window.DivaDeployment.live2dBaseUrl;
-          document.write('<script src="https://unpkg.com/oh-my-live2d@0.19.3/dist/index.min.js"><\/script>');
+          if (!window.DivaDeployment.disableLive2d) {
+            document.write('<script src="/vendor/oh-my-live2d/index.min.js"><\/script>');
+          }
         })();
       </script>
     </div>
@@ -244,27 +300,36 @@
       const link = document.querySelector('.chat-link-btn');
       if (link) link.href = window.DivaDeployment.buildPageUrl('chat_interface.html');
     })();
-    const oml2d = OML2D.loadOml2d({
-      importType: 'cubism5',
-      models: [
-        {
-          path: `${LIVE2D_ASSET_BASE}/natori_pro_zh/runtime/natori_pro_t06.model3.json`,
-          scale: 0.26,
-          position: [0, 0],
-          showHitAreaFrames: true,
-          motionPreloadStrategy: 'ALL'
-        }
-      ],
-      debug: true,
-      tips: {
-        welcomeTips: { duration: 0, priority: 0 },
-        idleTips: { duration: 0, priority: 0 }
+    (function initCharacter() {
+      const legacyLayer = document.getElementById('legacy-character-layer');
+      if (window.DivaDeployment.disableLive2d || !window.OML2D) {
+        if (legacyLayer) legacyLayer.classList.add('active');
+        return;
       }
-    });
 
-    oml2d.onStageSlideIn(() => {
-      console.log('natori 模型加载成功');
-    });
+      if (legacyLayer) legacyLayer.classList.remove('active');
+      const oml2d = OML2D.loadOml2d({
+        importType: 'cubism5',
+        models: [
+          {
+            path: `${LIVE2D_ASSET_BASE}/natori_pro_zh/runtime/natori_pro_t06.model3.json`,
+            scale: 0.26,
+            position: [0, 0],
+            showHitAreaFrames: true,
+            motionPreloadStrategy: 'ALL'
+          }
+        ],
+        debug: true,
+        tips: {
+          welcomeTips: { duration: 0, priority: 0 },
+          idleTips: { duration: 0, priority: 0 }
+        }
+      });
+
+      oml2d.onStageSlideIn(() => {
+        console.log('natori model loaded');
+      });
+    })();
 
     // ====== 2) PDF 上传 + 页面内预览 ======
     const input = document.getElementById('pdfInput');

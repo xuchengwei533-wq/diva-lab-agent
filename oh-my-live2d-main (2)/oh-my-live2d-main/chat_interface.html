@@ -4,10 +4,6 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>滴哇 - 聊天界面</title>
-    <script
-      defer
-      src="https://unpkg.com/face-api.js@0.22.2/dist/face-api.min.js"
-    ></script>
     <style>
       * {
         margin: 0;
@@ -1010,7 +1006,13 @@
         const params = new URLSearchParams(location.search || "");
         const storagePrefix = "diva.";
         const clean = (value) => (value || "").trim().replace(/\/+$/, "");
+        const truthy = (value) => ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
         const fromConfig = (name, fallback) => {
+          const value = clean(params.get(name) || localStorage.getItem(storagePrefix + name));
+          if (value) localStorage.setItem(storagePrefix + name, value);
+          return value || fallback;
+        };
+        const optionFromConfig = (name, fallback) => {
           const value = clean(params.get(name) || localStorage.getItem(storagePrefix + name));
           if (value) localStorage.setItem(storagePrefix + name, value);
           return value || fallback;
@@ -1045,6 +1047,25 @@
           (useRemoteLive2dBase
             ? `${live2dProtocol}://${live2dHost}:${getPort("live2dPort", 8010)}`
             : location.origin);
+        const legacyMode =
+          truthy(optionFromConfig("legacy", "0")) ||
+          truthy(optionFromConfig("lite", "0"));
+        const renderMode = optionFromConfig(
+          "renderMode",
+          legacyMode ? "gif" : "mao",
+        ).toLowerCase();
+        const disableFaceTracking =
+          legacyMode || truthy(optionFromConfig("disableFace", "0"));
+        const disableLive2d =
+          legacyMode ||
+          renderMode === "gif" ||
+          truthy(optionFromConfig("disableLive2d", "0"));
+        const ttsMode = optionFromConfig("ttsMode", "1");
+        const characterRenderMode =
+          disableLive2d || renderMode === "gif" ? 1 :
+          renderMode === "hiyori" ? 3 :
+          renderMode === "live2d" || renderMode === "mao" ? 4 :
+          4;
         const passThroughKeys = [
           "apiHost",
           "backendHost",
@@ -1059,6 +1080,12 @@
           "live2dProtocol",
           "live2dPort",
           "live2dBase",
+          "legacy",
+          "lite",
+          "renderMode",
+          "disableFace",
+          "disableLive2d",
+          "ttsMode",
         ];
         const buildPageUrl = (pageName) => {
           const next = new URLSearchParams();
@@ -1078,6 +1105,12 @@
           ttsBaseUrl: serviceBase("ttsPort", 8004),
           live2dBaseUrl: live2dBase,
           buildPageUrl,
+          legacyMode,
+          renderMode,
+          disableFaceTracking,
+          disableLive2d,
+          ttsMode,
+          characterRenderMode,
         };
       })();
     </script>
@@ -1085,13 +1118,15 @@
     <script>
       (function () {
         window.__LIVE2D_ASSET_BASE__ = window.DivaDeployment.live2dBaseUrl;
-        document.write(
-          '<script src="https://unpkg.com/oh-my-live2d@0.19.3/dist/index.min.js"><\/script>',
-        );
+        if (!window.DivaDeployment.disableLive2d) {
+          document.write(
+            '<script src="/vendor/oh-my-live2d/index.min.js"><\/script>',
+          );
+        }
       })();
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.0/lame.min.js"></script>
+    <script src="/vendor/chart/chart.umd.min.js"></script>
+    <script src="/vendor/lamejs/lame.min.js"></script>
 
     <script>
       // =========================
@@ -1104,10 +1139,10 @@
       const TTS_REST_URL = `${window.DivaDeployment.ttsBaseUrl}/api/tts/speak`;
       const TTS_TOTAL_URL = `${window.DivaDeployment.ttsBaseUrl}/api/tts-total/speak`;
       const TTS_TOTAL_RANDOM_WAV_URL = `${window.DivaDeployment.ttsBaseUrl}/api/tts-total/random-wav`;
-      const TTS_OUTPUT_MODE = 1; // 1 = 原来的 WebSocket 流式 TTS, 2 = 新的 TTS-total 完整 MP3 TTS
-      const CHARACTER_RENDER_MODE = 4; // 1 = GIF, 2 = Live2D, 3 = 带帽子的 Live2D, 4 = mao Live2D
-      const CHARACTER_GIF_TALKING_URL = `/packages/gif/download%20(3).gif`;
-      const CHARACTER_GIF_IDLE_URL = `/packages/gif/download%20(4).gif`;
+      const TTS_OUTPUT_MODE = Number(window.DivaDeployment.ttsMode) || 1; // 1 = WebSocket TTS, 2 = TTS-total MP3
+      const CHARACTER_RENDER_MODE = window.DivaDeployment.characterRenderMode; // 1 = GIF, 3 = hiyori Live2D, 4 = mao Live2D
+      const CHARACTER_GIF_TALKING_URL = `/packages/gif/%E8%AF%B4%E8%AF%9D.gif`;
+      const CHARACTER_GIF_IDLE_URL = `/packages/gif/%E5%BE%85%E6%9C%BA.gif`;
       const CHARACTER_GIF_TALKING_CYCLE_MS = 2200;
       const TTS_DEFAULT_VOICE_TYPE = "deep_male";
 
@@ -2371,6 +2406,7 @@
       let emotionRaf = 0;
       let emotionDetecting = false;
       let emotionModelLoadPromise = null;
+      let faceApiLoadPromise = null;
       let emotionTotals = null;
       let emotionFrameCount = 0;
       let emotionCharts = {};
@@ -2385,6 +2421,28 @@
       const messageInput = document.getElementById("messageInput");
       const chatMessages = document.getElementById("chatMessages");
       const ttsToggleBtn = document.getElementById("ttsToggle");
+
+      function isFaceTrackingEnabled() {
+        return !window.DivaDeployment.disableFaceTracking;
+      }
+
+      function loadFaceApiScript() {
+        if (!isFaceTrackingEnabled()) {
+          return Promise.reject(new Error("Face tracking is disabled in lite mode"));
+        }
+        if (window.faceapi) return Promise.resolve(window.faceapi);
+        if (faceApiLoadPromise) return faceApiLoadPromise;
+
+        faceApiLoadPromise = new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = "/vendor/face-api/face-api.min.js";
+          script.async = true;
+          script.onload = () => resolve(window.faceapi);
+          script.onerror = () => reject(new Error("face-api script failed to load"));
+          document.head.appendChild(script);
+        });
+        return faceApiLoadPromise;
+      }
 
       const TECH_NAME_MAP = {
         vibrato: "颤音技巧",
@@ -2597,6 +2655,7 @@
       function ensureEmotionModelsLoaded() {
         if (emotionModelLoadPromise) return emotionModelLoadPromise;
         emotionModelLoadPromise = (async () => {
+          await loadFaceApiScript();
           const base = window.__LIVE2D_ASSET_BASE__ || location.origin;
           const localModelUrl = `${String(base).replace(/\/$/, "")}/face-api-models`;
           const remoteModelUrl =
@@ -2635,6 +2694,14 @@
         const live = document.getElementById(emotionUiCurrent.liveId);
         const video = document.getElementById(emotionUiCurrent.videoId);
         if (!live || !video) return;
+
+        if (!isFaceTrackingEnabled()) {
+          emotionActive = false;
+          emotionDetecting = false;
+          live.style.display = "none";
+          setEmotionStatus("低配模式已关闭摄像头表情分析");
+          return;
+        }
 
         live.style.display = "block";
         resetEmotionAggregation();

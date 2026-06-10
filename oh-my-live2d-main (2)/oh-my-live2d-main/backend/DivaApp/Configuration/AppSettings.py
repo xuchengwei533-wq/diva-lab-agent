@@ -34,17 +34,21 @@ def _GetUrl(Name: str, Default: str) -> str:
     return os.getenv(Name, Default).rstrip("/")
 
 
+def _GetTuple(Name: str, Default: Tuple[str, ...]) -> Tuple[str, ...]:
+    RawValue = os.getenv(Name)
+    if RawValue is None or RawValue.strip() == "":
+        return Default
+    return tuple(Item.strip() for Item in RawValue.split(",") if Item.strip())
+
+
 @dataclass(frozen=True)
 class GatewaySettings:
     Host: str = field(default_factory=lambda: os.getenv("GATEWAY_HOST", "0.0.0.0"))
     Port: int = field(default_factory=lambda: _GetInt("GATEWAY_PORT", 8002))
     AsrBaseUrl: str = field(default_factory=lambda: _GetUrl("ASR_BASE_URL", "http://127.0.0.1:8006"))
     TtsBaseUrl: str = field(default_factory=lambda: _GetUrl("TTS_BASE_URL", "http://127.0.0.1:8004"))
-    CorsAllowOrigins: Tuple[str, ...] = (
-        "http://localhost:8001",
-        "http://127.0.0.1:8001",
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
+    CorsAllowOrigins: Tuple[str, ...] = field(
+        default_factory=lambda: _GetTuple("CORS_ALLOW_ORIGINS", ("*",))
     )
 
 

@@ -73,7 +73,7 @@ def CreateGatewayApp(Settings: GatewaySettings | None = None) -> FastAPI:
     App.add_middleware(
         CORSMiddleware,
         allow_origins=list(Settings.CorsAllowOrigins),
-        allow_credentials=True,
+        allow_credentials="*" not in Settings.CorsAllowOrigins,
         allow_methods=["*"],
         allow_headers=["*"],
     )

@@ -23,12 +23,13 @@ def get_lan_ip() -> str:
 def main() -> int:
     host = get_lan_ip()
     web_port = os.getenv("WEB_PORT", "8000")
-    live2d_port = os.getenv("LIVE2D_PORT", "8010")
     url = (
-        f"http://{host}:{web_port}/mao_demo.html"
-        f"?apiHost={host}"
-        f"&live2dHost={host}"
-        f"&live2dPort={live2d_port}"
+        f"http://{host}:{web_port}/tablet_legacy.html"
+        "?singleOrigin=1"
+        "&legacy=1"
+        "&lite=1"
+        "&renderMode=gif"
+        "&disableFace=1"
     )
     print(url)
     return 0

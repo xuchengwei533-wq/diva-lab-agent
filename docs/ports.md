@@ -70,7 +70,7 @@
   - `8004` 用于 TTS WebSocket
   - `8005` 用于音频评分
   - `8006` 用于语音识别
-  - 目前 `TTS_WS_URL` 仍硬编码为 `ws://localhost:8004/...`
+  - `TTS_WS_URL` 当前通过页面部署参数中的 `apiHost` / `ttsPort` 生成
 
 ## Refactor Notes
 

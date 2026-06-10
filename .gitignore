@@ -1,33 +1,39 @@
-cat > .gitignore << 'EOF'
-# ---- Python ----
+# Python
 .venv/
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# ---- Node / Frontend ----
+# Node / frontend
 node_modules/
-dist/
-build/
-.vite/
 .next/
 out/
+build/
+.vite/
 
-# ---- Env / Secrets ----
+# Android / generated artifacts
+android-tablet/.gradle/
+android-tablet/app/build/
+dist/
+
+# Vercel local project metadata
+.vercel/
+vercel-proxy/.vercel/
+
+# Environment / secrets
 .env
 .env.*
 *.key
 *.pem
 
-# ---- Logs ----
+# Logs
+logs/
 *.log
 
-# ---- OS / Editor ----
+# OS / editor
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
-EOF
-
 .trae/

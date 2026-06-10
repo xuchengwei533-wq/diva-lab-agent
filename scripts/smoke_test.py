@@ -51,7 +51,8 @@ def http_check(name: str, url: str, expected_statuses: Tuple[int, ...] = (200,))
 
 def run_checks() -> List[CheckResult]:
     return [
-        http_check("web-page-8000", f"http://{HOST}:{WEB_PORT}/mao_demo.html", (200,)),
+        http_check("web-page-8000", f"http://{HOST}:{WEB_PORT}/tablet_legacy.html", (200,)),
+        http_check("full-web-page-8000", f"http://{HOST}:{WEB_PORT}/mao_demo.html", (200,)),
         http_check("chat-health-8003", f"http://{HOST}:{CHAT_PORT}/health", (200,)),
         http_check("tts-docs-8004", f"http://{HOST}:{TTS_PORT}/docs", (200,)),
         http_check("scoring-health-8005", f"http://{HOST}:{SCORING_PORT}/health", (200,)),
