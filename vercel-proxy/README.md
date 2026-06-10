@@ -6,6 +6,12 @@ It does not run the Xiaosita audio/chat backend on Vercel. Instead, it forwards
 all requests to the current public backend tunnel configured with
 `BACKEND_BASE_URL`.
 
+## Current Production URL
+
+```text
+https://vercel-proxy-nine-beta.vercel.app
+```
+
 ## Required Environment Variable
 
 ```text

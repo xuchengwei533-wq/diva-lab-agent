@@ -11,9 +11,9 @@ android {
         applicationId "com.maozhishi.tablet"
         minSdk 21
         targetSdk 35
-        versionCode 9
-        versionName "0.9.0-tunnel-refresh"
-        buildConfigField "String", "DEFAULT_PAGE_URL", "\"https://reporters-dealtime-defence-advised.trycloudflare.com/tablet_legacy.html?singleOrigin=1&legacy=1&lite=1&renderMode=gif&disableFace=1\""
+        versionCode 10
+        versionName "0.10.0-vercel-proxy"
+        buildConfigField "String", "DEFAULT_PAGE_URL", "\"https://vercel-proxy-nine-beta.vercel.app/tablet_legacy.html?singleOrigin=1&publicMode=1\""
     }
 
     buildFeatures {
