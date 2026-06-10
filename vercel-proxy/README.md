@@ -39,3 +39,30 @@ All paths are forwarded:
 
 The Android APK should point at the final Vercel URL, not directly at the
 temporary Cloudflare Tunnel URL.
+
+## One-Command Refresh
+
+From the repository root, run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\deploy_tablet_public.ps1
+```
+
+The script starts the local backend, creates a fresh free Cloudflare Tunnel,
+updates Vercel's Production `BACKEND_BASE_URL`, redeploys the proxy, and checks
+the final tablet URL.
+
+Useful options:
+
+```powershell
+# Reuse the existing live tunnel when it is still healthy.
+powershell -ExecutionPolicy Bypass -File scripts\deploy_tablet_public.ps1 -ReuseTunnel
+
+# Skip backend restart and only refresh the tunnel/Vercel side.
+powershell -ExecutionPolicy Bypass -File scripts\deploy_tablet_public.ps1 -SkipBackendRestart
+
+# Also run a real /api/chat smoke test after deployment.
+powershell -ExecutionPolicy Bypass -File scripts\deploy_tablet_public.ps1 -RunChatSmoke
+```
+
+The latest result is written to `logs\tablet-server\deploy_status.txt`.

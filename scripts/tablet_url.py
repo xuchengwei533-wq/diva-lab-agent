@@ -26,10 +26,7 @@ def main() -> int:
     url = (
         f"http://{host}:{web_port}/tablet_legacy.html"
         "?singleOrigin=1"
-        "&legacy=1"
-        "&lite=1"
-        "&renderMode=gif"
-        "&disableFace=1"
+        "&publicMode=1"
     )
     print(url)
     return 0
