@@ -209,18 +209,6 @@ public class MainActivity extends Activity {
         if (!singleOrigin && uri.getQueryParameter("live2dPort") == null) {
             builder.appendQueryParameter("live2dPort", "8010");
         }
-        if (uri.getQueryParameter("legacy") == null) {
-            builder.appendQueryParameter("legacy", "1");
-        }
-        if (uri.getQueryParameter("lite") == null) {
-            builder.appendQueryParameter("lite", "1");
-        }
-        if (uri.getQueryParameter("renderMode") == null) {
-            builder.appendQueryParameter("renderMode", "gif");
-        }
-        if (uri.getQueryParameter("disableFace") == null) {
-            builder.appendQueryParameter("disableFace", "1");
-        }
         return builder.build().toString();
     }
 
@@ -243,8 +231,7 @@ public class MainActivity extends Activity {
                 || isTruthyQueryParam(uri, "lite")) {
             return false;
         }
-        String renderMode = uri.getQueryParameter("renderMode");
-        return renderMode == null || !"gif".equalsIgnoreCase(renderMode.trim());
+        return isTruthyQueryParam(uri, "enableFace") || isTruthyQueryParam(uri, "camera");
     }
 
     private int dp(int value) {
