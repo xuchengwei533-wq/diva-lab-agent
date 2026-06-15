@@ -11,9 +11,9 @@ android {
         applicationId "com.maozhishi.tablet"
         minSdk 21
         targetSdk 35
-        versionCode 13
-        versionName "0.13.0-lan-voice"
-        buildConfigField "String", "DEFAULT_PAGE_URL", "\"http://192.168.5.204:8000/tablet_legacy.html?singleOrigin=1&publicMode=1&voiceMode=1&apkVersion=13\""
+        versionCode 14
+        versionName "0.14.0-lan-hello-wake"
+        buildConfigField "String", "DEFAULT_PAGE_URL", "\"http://192.168.5.204:8000/tablet_legacy.html?singleOrigin=1&publicMode=1&voiceMode=1&apkVersion=14\""
     }
 
     buildFeatures {

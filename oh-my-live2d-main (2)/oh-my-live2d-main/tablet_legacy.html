@@ -357,7 +357,7 @@
     </div>
 
     <div id="statusBadge">正在连接...</div>
-    <div id="voiceHint">请说“你好老肖”唤醒我</div>
+    <div id="voiceHint">请说“你好”唤醒我</div>
     <div id="caption">我是肖斯塔科维奇，欢迎走进我的故事</div>
 
     <div id="chatPanel">
@@ -399,10 +399,11 @@
       var talkingGif = assetBase + "/packages/gif/%E8%AF%B4%E8%AF%9D.gif";
       var preludeText = getParam("preludeText", "我是肖斯塔科维奇，欢迎走进我的故事");
       var preludeEnabled = !truthy(getParam("disablePrelude", "0"));
-      var wakePhrase = getParam("wakePhrase", "你好老肖");
+      var wakePhrase = getParam("wakePhrase", "你好");
+      var wakeReplyText = getParam("wakeReplyText", "你好，我在");
       var autoListen = !truthy(getParam("disableAutoListen", "0"));
-      var wakeListenMs = parseInt(getParam("wakeListenMs", "4200"), 10) || 4200;
-      var dialogueListenMs = parseInt(getParam("dialogueListenMs", "8500"), 10) || 8500;
+      var wakeListenMs = parseInt(getParam("wakeListenMs", "3200"), 10) || 3200;
+      var dialogueListenMs = parseInt(getParam("dialogueListenMs", "5000"), 10) || 5000;
       var awakened = false;
       var listeningForWake = true;
       var preludePlayed = false;
@@ -498,13 +499,11 @@
         mic.innerHTML = "听";
         mic.className = "dockButton";
         if (errorText) {
-          setStatus("录音失败: " + errorText);
-          scheduleListenRestart(1600);
+          handleRecordingFailure("录音失败: " + errorText, 1600);
           return;
         }
         if (!base64Pcm) {
-          setStatus("录音为空，请重试");
-          scheduleListenRestart(1200);
+          handleNoRecognizedSpeech("录音为空，请重试");
           return;
         }
         sendPcmToServer(base64Pcm);
@@ -770,7 +769,7 @@
           messages.push({ role: "assistant", content: reply });
           while (messages.length > 10) messages.shift();
           speak(reply, function () {
-            if (awakened) scheduleListenRestart(700);
+            if (awakened) scheduleListenRestart(350);
           });
         });
       }
@@ -1006,6 +1005,30 @@
         }, delayMs || 800);
       }
 
+      function enterSleepMode(statusText) {
+        awakened = false;
+        listeningForWake = true;
+        setStatus(statusText || "已进入休眠");
+        setVoiceHint("请说“" + wakePhrase + "”唤醒我");
+        setCaption("我先休眠，听到“" + wakePhrase + "”再回来。");
+        scheduleListenRestart(700);
+      }
+
+      function handleNoRecognizedSpeech(statusText) {
+        if (awakened) {
+          enterSleepMode("五秒内没有听到回复，已休眠");
+          return;
+        }
+        setStatus(statusText || "未听到唤醒词");
+        setVoiceHint("请说“" + wakePhrase + "”");
+        scheduleListenRestart(500);
+      }
+
+      function handleRecordingFailure(statusText, delayMs) {
+        setStatus(statusText || "录音失败");
+        scheduleListenRestart(delayMs || 1200);
+      }
+
       function startListeningCycle() {
         if (!autoListen || busy || isRecording || isAudioPlaying()) {
           scheduleListenRestart(1200);
@@ -1031,7 +1054,7 @@
         if (isRecording) {
           stopRecording();
         } else {
-          startRecording(dialogueListenMs);
+          startRecording(awakened ? dialogueListenMs : wakeListenMs);
         }
       }
 
@@ -1057,8 +1080,7 @@
           }
         }
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof window.MediaRecorder === "undefined") {
-          setStatus("当前 WebView 不支持录音");
-          scheduleListenRestart(1600);
+          handleRecordingFailure("当前 WebView 不支持录音", 1600);
           return;
         }
         setStatus("正在请求麦克风...");
@@ -1077,7 +1099,7 @@
             mediaRecorder = new MediaRecorder(stream, options);
           } catch (error) {
             releaseMicStream();
-            setStatus("录音器启动失败: " + error.message);
+            handleRecordingFailure("录音器启动失败: " + error.message, 1600);
             return;
           }
           mediaRecorder.ondataavailable = function (event) {
@@ -1097,13 +1119,11 @@
             scheduleAutoStop(durationMs);
           } catch (error2) {
             releaseMicStream();
-            setStatus("录音无法启动: " + error2.message);
-            scheduleListenRestart(1600);
+            handleRecordingFailure("录音无法启动: " + error2.message, 1600);
           }
         })["catch"](function (error3) {
           releaseMicStream();
-          setStatus("麦克风不可用: " + error3.message);
-          scheduleListenRestart(2200);
+          handleRecordingFailure("麦克风不可用: " + error3.message, 2200);
         });
       }
 
@@ -1157,8 +1177,7 @@
         mic.className = "dockButton";
         releaseMicStream();
         if (!voiceChunks.length) {
-          setStatus("录音为空，请重试");
-          scheduleListenRestart(1200);
+          handleNoRecognizedSpeech("录音为空，请重试");
           return;
         }
         audioBlob = new Blob(voiceChunks, { type: blobType });
@@ -1166,8 +1185,7 @@
         setStatus("正在转换音频...");
         blobToPcm16k(audioBlob, function (error, pcmBuffer) {
           if (error) {
-            setStatus("音频处理失败: " + error.message);
-            scheduleListenRestart(1600);
+            handleRecordingFailure("音频处理失败: " + error.message, 1600);
             return;
           }
           sendPcmToServer(arrayBufferToBase64(pcmBuffer));
@@ -1264,16 +1282,11 @@
       function containsWakePhrase(text) {
         var normalized = normalizeWakeText(text);
         var target = normalizeWakeText(wakePhrase);
-        return normalized.indexOf(target) >= 0
+        return (target && normalized.indexOf(target) >= 0)
+          || normalized.indexOf("你好") >= 0
           || normalized.indexOf("你好老萧") >= 0
           || normalized.indexOf("你好老肖") >= 0
           || normalized.indexOf("你好老小") >= 0;
-      }
-
-      function stripWakePhrase(text) {
-        return String(text || "")
-          .replace(/你好[\s，,。.!！?？、]*(老肖|老萧|老小)/g, "")
-          .replace(/^\s+|\s+$/g, "");
       }
 
       function isSleepCommand(text) {
@@ -1286,10 +1299,8 @@
 
       function handleRecognizedText(text) {
         var spoken = String(text || "").replace(/^\s+|\s+$/g, "");
-        var nextText;
         if (!spoken) {
-          setStatus(listeningForWake ? "等待唤醒" : "没有识别到语音");
-          scheduleListenRestart(900);
+          handleNoRecognizedSpeech("没有识别到语音");
           return;
         }
 
@@ -1304,17 +1315,12 @@
           awakened = true;
           listeningForWake = false;
           preludePlayed = false;
-          nextText = stripWakePhrase(spoken);
           setStatus("老肖已唤醒");
           setVoiceHint("老肖已唤醒，请直接说话");
-          setCaption("我在，请说。");
-          if (nextText) {
-            sendMessage(nextText);
-          } else {
-            speak("我在，请说。", function () {
-              scheduleListenRestart(600);
-            });
-          }
+          setCaption(wakeReplyText);
+          speak(wakeReplyText, function () {
+            scheduleListenRestart(350);
+          });
           return;
         }
 
@@ -1342,14 +1348,12 @@
         }, 45000, function (error, data) {
           var text;
           if (error) {
-            setStatus("语音识别失败: " + error.message);
-            scheduleListenRestart(1400);
+            handleRecordingFailure("语音识别失败: " + error.message, 1400);
             return;
           }
           text = data && data.text ? String(data.text).replace(/^\s+|\s+$/g, "") : "";
           if (!text) {
-            setStatus("没有识别到语音，请重试");
-            scheduleListenRestart(700);
+            handleNoRecognizedSpeech("没有识别到语音");
             return;
           }
           setStatus("识别完成");
