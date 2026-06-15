@@ -18,8 +18,7 @@
       font-size: 16px;
     }
 
-    button,
-    input {
+    button {
       font-family: Arial, "Microsoft YaHei", sans-serif;
     }
 
@@ -87,15 +86,29 @@
       left: 14px;
       right: 82px;
       bottom: 14px;
-      max-height: 96px;
-      padding: 10px 12px;
+      max-height: 132px;
+      padding: 14px 16px;
       border-radius: 6px;
-      background: rgba(255, 255, 255, 0.9);
+      background: rgba(255, 255, 255, 0.92);
       color: #17212b;
       line-height: 1.5;
-      font-size: 15px;
+      font-size: 18px;
       overflow: hidden;
       box-shadow: 0 2px 12px rgba(25, 45, 63, 0.18);
+      z-index: 3;
+    }
+
+    #voiceHint {
+      position: absolute;
+      left: 14px;
+      top: 58px;
+      max-width: 66%;
+      padding: 8px 12px;
+      border-radius: 6px;
+      background: rgba(18, 29, 39, 0.72);
+      color: #ffffff;
+      line-height: 1.4;
+      font-size: 14px;
       z-index: 3;
     }
 
@@ -141,17 +154,7 @@
     }
 
     #chatPanel {
-      position: absolute;
-      top: 0;
-      bottom: 0;
-      right: -430px;
-      width: 360px;
-      background: rgba(250, 252, 254, 0.96);
-      border-left: 1px solid rgba(130, 148, 166, 0.45);
-      box-shadow: -6px 0 18px rgba(20, 31, 42, 0.18);
-      z-index: 6;
-      -webkit-transition: right 180ms ease;
-      transition: right 180ms ease;
+      display: none;
     }
 
     #app.panel-open #chatPanel {
@@ -328,13 +331,20 @@
         left: 8px;
         right: 64px;
         bottom: 8px;
-        font-size: 14px;
+        font-size: 16px;
       }
 
       #statusBadge {
         left: 8px;
         top: 8px;
         max-width: 64%;
+      }
+
+      #voiceHint {
+        left: 8px;
+        top: 54px;
+        max-width: 70%;
+        font-size: 13px;
       }
     }
   </style>
@@ -347,27 +357,17 @@
     </div>
 
     <div id="statusBadge">正在连接...</div>
+    <div id="voiceHint">请说“你好老肖”唤醒我</div>
     <div id="caption">我是肖斯塔科维奇，欢迎走进我的故事</div>
 
     <div id="chatPanel">
-      <div id="panelHead">
-        <div id="panelTitle">对话</div>
-        <button id="closePanel" type="button" title="收起">×</button>
-      </div>
       <div id="messages">
         <div class="msg bot">我是肖斯塔科维奇，欢迎走进我的故事</div>
-      </div>
-      <div id="composer">
-        <input id="input" type="text" autocomplete="off" placeholder="输入文字">
-        <button id="send" type="button">发送</button>
-        <div id="miniStatus">等待输入</div>
       </div>
     </div>
 
     <div id="dock">
-      <button id="toggleChat" class="dockButton dockButtonActive" type="button" title="对话">聊</button>
-      <button id="sendDock" class="dockButton" type="button" title="发送">发</button>
-      <button id="mic" class="dockButton" type="button" title="语音">麦</button>
+      <button id="mic" class="dockButton" type="button" title="语音">听</button>
       <button id="mute" class="dockButton" type="button" title="静音">静</button>
       <button id="replay" class="dockButton" type="button" title="重播">复</button>
       <button id="stop" class="dockButton" type="button" title="停止">停</button>
@@ -399,6 +399,13 @@
       var talkingGif = assetBase + "/packages/gif/%E8%AF%B4%E8%AF%9D.gif";
       var preludeText = getParam("preludeText", "我是肖斯塔科维奇，欢迎走进我的故事");
       var preludeEnabled = !truthy(getParam("disablePrelude", "0"));
+      var wakePhrase = getParam("wakePhrase", "你好老肖");
+      var autoListen = !truthy(getParam("disableAutoListen", "0"));
+      var wakeListenMs = parseInt(getParam("wakeListenMs", "4200"), 10) || 4200;
+      var dialogueListenMs = parseInt(getParam("dialogueListenMs", "8500"), 10) || 8500;
+      var awakened = false;
+      var listeningForWake = true;
+      var preludePlayed = false;
       var messages = [];
       var busy = false;
       var muted = false;
@@ -412,6 +419,8 @@
       var micStream = null;
       var voiceChunks = [];
       var audioContext = null;
+      var autoStopTimer = null;
+      var listenRestartTimer = null;
 
       var app = document.getElementById("app");
       var character = document.getElementById("character");
@@ -421,6 +430,7 @@
       var sendDock = document.getElementById("sendDock");
       var statusBadge = document.getElementById("statusBadge");
       var miniStatus = document.getElementById("miniStatus");
+      var voiceHint = document.getElementById("voiceHint");
       var caption = document.getElementById("caption");
       var player = document.getElementById("player");
       var toggleChat = document.getElementById("toggleChat");
@@ -435,12 +445,13 @@
 
       character.src = idleGif;
       setPanelOpen(false);
-      setStatus("已连接: " + (singleOrigin ? location.host : host));
+      setStatus("等待唤醒");
+      setVoiceHint("请说“" + wakePhrase + "”唤醒我");
 
-      toggleChat.onclick = function () { setPanelOpen(app.className !== "panel-open"); };
-      closePanel.onclick = function () { setPanelOpen(false); };
-      send.onclick = sendMessage;
-      sendDock.onclick = sendMessage;
+      if (toggleChat) toggleChat.onclick = function () { setPanelOpen(app.className !== "panel-open"); };
+      if (closePanel) closePanel.onclick = function () { setPanelOpen(false); };
+      if (send) send.onclick = function () { sendMessage(); };
+      if (sendDock) sendDock.onclick = function () { sendMessage(); };
       mic.onclick = toggleRecording;
       mute.onclick = toggleMute;
       replay.onclick = replayAudio;
@@ -449,14 +460,20 @@
       fullscreen.onclick = enterFullscreen;
       reload.onclick = function () { location.reload(true); };
 
-      input.onkeydown = function (event) {
-        event = event || window.event;
-        if (event.keyCode === 13) {
-          sendMessage();
-          return false;
-        }
-        return true;
-      };
+      if (input) {
+        input.onkeydown = function (event) {
+          event = event || window.event;
+          if (event.keyCode === 13) {
+            sendMessage();
+            return false;
+          }
+          return true;
+        };
+      }
+
+      if (autoListen) {
+        scheduleListenRestart(700);
+      }
 
       player.onplaying = function () {
         setCharacterSpeaking(true);
@@ -478,14 +495,16 @@
       window.onNativeVoiceResult = function (base64Pcm, errorText) {
         isRecording = false;
         nativeRecording = false;
-        mic.innerHTML = "麦";
+        mic.innerHTML = "听";
         mic.className = "dockButton";
         if (errorText) {
           setStatus("录音失败: " + errorText);
+          scheduleListenRestart(1600);
           return;
         }
         if (!base64Pcm) {
           setStatus("录音为空，请重试");
+          scheduleListenRestart(1200);
           return;
         }
         sendPcmToServer(base64Pcm);
@@ -567,8 +586,8 @@
 
       function setPanelOpen(open) {
         app.className = open ? "panel-open" : "panel-closed";
-        toggleChat.className = open ? "dockButton dockButtonActive" : "dockButton";
-        if (open) {
+        if (toggleChat) toggleChat.className = open ? "dockButton dockButtonActive" : "dockButton";
+        if (open && input) {
           setTimeout(function () {
             try { input.focus(); } catch (ignore) {}
           }, 50);
@@ -578,7 +597,11 @@
       function setStatus(text) {
         var safe = escapeHtml(text || "");
         statusBadge.innerHTML = safe;
-        miniStatus.innerHTML = safe;
+        if (miniStatus) miniStatus.innerHTML = safe;
+      }
+
+      function setVoiceHint(text) {
+        if (voiceHint) voiceHint.innerHTML = escapeHtml(text || "");
       }
 
       function setCaption(text) {
@@ -587,9 +610,9 @@
 
       function setBusy(nextBusy) {
         busy = !!nextBusy;
-        send.disabled = busy;
-        sendDock.disabled = busy;
-        input.disabled = busy;
+        if (send) send.disabled = busy;
+        if (sendDock) sendDock.disabled = busy;
+        if (input) input.disabled = busy;
       }
 
       function setCharacterSpeaking(speaking) {
@@ -673,20 +696,22 @@
         xhr.send(null);
       }
 
-      function sendMessage() {
-        var text = input.value.replace(/^\s+|\s+$/g, "");
+      function sendMessage(voiceText) {
+        var text = typeof voiceText === "string"
+          ? voiceText.replace(/^\s+|\s+$/g, "")
+          : (input ? input.value.replace(/^\s+|\s+$/g, "") : "");
         if (busy) return;
         if (!text) {
-          setPanelOpen(true);
-          setStatus("等待输入");
+          setStatus(awakened ? "请直接说话" : "等待唤醒");
           return;
         }
 
-        input.value = "";
+        if (input) input.value = "";
         addMessage("user", text);
-        setCaption(text);
+        setCaption("你：" + text);
         setBusy(true);
-        if (preludeEnabled && preludeText) {
+        if (preludeEnabled && preludeText && !preludePlayed) {
+          preludePlayed = true;
           addMessage("bot", preludeText);
           setStatus("正在播放开场白...");
           playPrelude(function () {
@@ -719,6 +744,7 @@
       function requestChatReply(text) {
         var history;
         setStatus("正在请求数字人...");
+        setVoiceHint("老肖正在思考");
         history = messages.slice(0);
         history.push({ role: "user", content: text });
         requestJson(chatUrl, { model: "ignored", messages: history }, 120000, function (error, data) {
@@ -727,6 +753,7 @@
           if (error) {
             addMessage("sys", "聊天服务失败: " + error.message);
             setStatus("聊天服务失败");
+            if (awakened) scheduleListenRestart(1200);
             return;
           }
 
@@ -734,6 +761,7 @@
           if (!reply) {
             addMessage("sys", "聊天服务没有返回文字");
             setStatus("聊天服务没有返回文字");
+            if (awakened) scheduleListenRestart(1200);
             return;
           }
 
@@ -741,7 +769,9 @@
           messages.push({ role: "user", content: text });
           messages.push({ role: "assistant", content: reply });
           while (messages.length > 10) messages.shift();
-          speak(reply);
+          speak(reply, function () {
+            if (awakened) scheduleListenRestart(700);
+          });
         });
       }
 
@@ -948,6 +978,51 @@
         }
       }
 
+      function isAudioPlaying() {
+        return !!nativeAudioActive || (player && !player.paused && !player.ended);
+      }
+
+      function clearAutoStopTimer() {
+        if (autoStopTimer) {
+          clearTimeout(autoStopTimer);
+          autoStopTimer = null;
+        }
+      }
+
+      function scheduleAutoStop(durationMs) {
+        clearAutoStopTimer();
+        if (!durationMs || durationMs <= 0) return;
+        autoStopTimer = setTimeout(function () {
+          if (isRecording) stopRecording();
+        }, durationMs);
+      }
+
+      function scheduleListenRestart(delayMs) {
+        if (!autoListen) return;
+        if (listenRestartTimer) clearTimeout(listenRestartTimer);
+        listenRestartTimer = setTimeout(function () {
+          listenRestartTimer = null;
+          startListeningCycle();
+        }, delayMs || 800);
+      }
+
+      function startListeningCycle() {
+        if (!autoListen || busy || isRecording || isAudioPlaying()) {
+          scheduleListenRestart(1200);
+          return;
+        }
+        listeningForWake = !awakened;
+        if (listeningForWake) {
+          setStatus("等待唤醒");
+          setVoiceHint("请说“" + wakePhrase + "”");
+          startRecording(wakeListenMs);
+        } else {
+          setStatus("请说话");
+          setVoiceHint("老肖已唤醒，请直接提问");
+          startRecording(dialogueListenMs);
+        }
+      }
+
       function toggleRecording() {
         if (busy) {
           setStatus("数字人回复中，请稍等");
@@ -956,36 +1031,36 @@
         if (isRecording) {
           stopRecording();
         } else {
-          startRecording();
+          startRecording(dialogueListenMs);
         }
       }
 
-      function startRecording() {
+      function startRecording(durationMs) {
         var options;
         if (window.AndroidVoice && window.AndroidVoice.start) {
-          setPanelOpen(true);
           isRecording = true;
           nativeRecording = true;
-          mic.innerHTML = "止";
+          mic.innerHTML = "听";
           mic.className = "dockButton dockButtonActive";
           setStatus("正在启动原生录音...");
           try {
             window.AndroidVoice.start();
+            scheduleAutoStop(durationMs);
             return;
           } catch (nativeError) {
             isRecording = false;
             nativeRecording = false;
-            mic.innerHTML = "麦";
+            clearAutoStopTimer();
+            mic.innerHTML = "听";
             mic.className = "dockButton";
             setStatus("原生录音不可用，尝试网页录音");
           }
         }
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof window.MediaRecorder === "undefined") {
-          setPanelOpen(true);
           setStatus("当前 WebView 不支持录音");
+          scheduleListenRestart(1600);
           return;
         }
-        setPanelOpen(true);
         setStatus("正在请求麦克风...");
         navigator.mediaDevices.getUserMedia({
           audio: {
@@ -1016,22 +1091,26 @@
           try {
             mediaRecorder.start();
             isRecording = true;
-            mic.innerHTML = "止";
+            mic.innerHTML = "听";
             mic.className = "dockButton dockButtonActive";
-            setStatus("录音中，再点麦克风停止");
+            setStatus("正在聆听...");
+            scheduleAutoStop(durationMs);
           } catch (error2) {
             releaseMicStream();
             setStatus("录音无法启动: " + error2.message);
+            scheduleListenRestart(1600);
           }
         })["catch"](function (error3) {
           releaseMicStream();
           setStatus("麦克风不可用: " + error3.message);
+          scheduleListenRestart(2200);
         });
       }
 
       function stopRecording() {
+        clearAutoStopTimer();
         isRecording = false;
-        mic.innerHTML = "麦";
+        mic.innerHTML = "听";
         mic.className = "dockButton";
         if (nativeRecording) {
           nativeRecording = false;
@@ -1074,11 +1153,12 @@
         var blobType = mediaRecorder && mediaRecorder.mimeType ? mediaRecorder.mimeType : "audio/webm";
         var audioBlob;
         isRecording = false;
-        mic.innerHTML = "麦";
+        mic.innerHTML = "听";
         mic.className = "dockButton";
         releaseMicStream();
         if (!voiceChunks.length) {
           setStatus("录音为空，请重试");
+          scheduleListenRestart(1200);
           return;
         }
         audioBlob = new Blob(voiceChunks, { type: blobType });
@@ -1087,6 +1167,7 @@
         blobToPcm16k(audioBlob, function (error, pcmBuffer) {
           if (error) {
             setStatus("音频处理失败: " + error.message);
+            scheduleListenRestart(1600);
             return;
           }
           sendPcmToServer(arrayBufferToBase64(pcmBuffer));
@@ -1174,6 +1255,85 @@
         return btoa(binary);
       }
 
+      function normalizeWakeText(value) {
+        return String(value || "")
+          .toLowerCase()
+          .replace(/[^\u4e00-\u9fa5a-z0-9]/g, "");
+      }
+
+      function containsWakePhrase(text) {
+        var normalized = normalizeWakeText(text);
+        var target = normalizeWakeText(wakePhrase);
+        return normalized.indexOf(target) >= 0
+          || normalized.indexOf("你好老萧") >= 0
+          || normalized.indexOf("你好老肖") >= 0
+          || normalized.indexOf("你好老小") >= 0;
+      }
+
+      function stripWakePhrase(text) {
+        return String(text || "")
+          .replace(/你好[\s，,。.!！?？、]*(老肖|老萧|老小)/g, "")
+          .replace(/^\s+|\s+$/g, "");
+      }
+
+      function isSleepCommand(text) {
+        var normalized = normalizeWakeText(text);
+        return normalized.indexOf("休息吧") >= 0
+          || normalized.indexOf("结束对话") >= 0
+          || normalized.indexOf("先这样") >= 0
+          || normalized.indexOf("不用了") >= 0;
+      }
+
+      function handleRecognizedText(text) {
+        var spoken = String(text || "").replace(/^\s+|\s+$/g, "");
+        var nextText;
+        if (!spoken) {
+          setStatus(listeningForWake ? "等待唤醒" : "没有识别到语音");
+          scheduleListenRestart(900);
+          return;
+        }
+
+        if (!awakened) {
+          if (!containsWakePhrase(spoken)) {
+            setCaption("等待唤醒：" + wakePhrase);
+            setStatus("未听到唤醒词");
+            scheduleListenRestart(500);
+            return;
+          }
+
+          awakened = true;
+          listeningForWake = false;
+          preludePlayed = false;
+          nextText = stripWakePhrase(spoken);
+          setStatus("老肖已唤醒");
+          setVoiceHint("老肖已唤醒，请直接说话");
+          setCaption("我在，请说。");
+          if (nextText) {
+            sendMessage(nextText);
+          } else {
+            speak("我在，请说。", function () {
+              scheduleListenRestart(600);
+            });
+          }
+          return;
+        }
+
+        if (isSleepCommand(spoken)) {
+          awakened = false;
+          listeningForWake = true;
+          messages = [];
+          setStatus("已回到待唤醒");
+          setVoiceHint("请说“" + wakePhrase + "”唤醒我");
+          setCaption("我先安静下来。");
+          speak("好，我先安静下来。", function () {
+            scheduleListenRestart(900);
+          });
+          return;
+        }
+
+        sendMessage(spoken);
+      }
+
       function sendPcmToServer(base64Pcm) {
         setStatus("正在识别语音...");
         requestJson(asrUrl, {
@@ -1183,17 +1343,17 @@
           var text;
           if (error) {
             setStatus("语音识别失败: " + error.message);
+            scheduleListenRestart(1400);
             return;
           }
           text = data && data.text ? String(data.text).replace(/^\s+|\s+$/g, "") : "";
           if (!text) {
             setStatus("没有识别到语音，请重试");
+            scheduleListenRestart(700);
             return;
           }
-          input.value = text;
-          setPanelOpen(true);
-          setStatus("识别完成，已发送");
-          sendMessage();
+          setStatus("识别完成");
+          handleRecognizedText(text);
         });
       }
     })();

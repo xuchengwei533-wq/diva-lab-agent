@@ -11,9 +11,9 @@ android {
         applicationId "com.maozhishi.tablet"
         minSdk 21
         targetSdk 35
-        versionCode 11
-        versionName "0.11.0-vercel-refresh"
-        buildConfigField "String", "DEFAULT_PAGE_URL", "\"https://vercel-proxy-nine-beta.vercel.app/tablet_legacy.html?singleOrigin=1&publicMode=1&apkVersion=11\""
+        versionCode 12
+        versionName "0.12.0-voice-wake"
+        buildConfigField "String", "DEFAULT_PAGE_URL", "\"https://vercel-proxy-nine-beta.vercel.app/tablet_legacy.html?singleOrigin=1&publicMode=1&voiceMode=1&apkVersion=12\""
     }
 
     buildFeatures {

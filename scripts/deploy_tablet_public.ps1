@@ -22,7 +22,7 @@ $TunnelStderr = Join-Path $LogDir "cloudflared.err.log"
 $DeployLog = Join-Path $LogDir "vercel_deploy.log"
 $StatusFile = Join-Path $LogDir "deploy_status.txt"
 $TunnelTarget = "http://127.0.0.1:8000"
-$TabletPath = "/tablet_legacy.html?singleOrigin=1&publicMode=1"
+$TabletPath = "/tablet_legacy.html?singleOrigin=1&publicMode=1&voiceMode=1"
 
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 

@@ -27,6 +27,7 @@ def main() -> int:
         f"http://{host}:{web_port}/tablet_legacy.html"
         "?singleOrigin=1"
         "&publicMode=1"
+        "&voiceMode=1"
     )
     print(url)
     return 0

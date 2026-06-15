@@ -176,7 +176,7 @@ Start-ServerProcess "asr-8006" $BackendRoot "& '$Python' 'asr_new.py'"
 
 Wait-ForPorts -Ports $ServicePorts
 
-$TabletUrl = "http://$LanIp`:8000/tablet_legacy.html?singleOrigin=1&publicMode=1"
+$TabletUrl = "http://$LanIp`:8000/tablet_legacy.html?singleOrigin=1&publicMode=1&voiceMode=1"
 Write-Host ""
 Write-Host "Tablet URL:"
 Write-Host $TabletUrl
