@@ -404,6 +404,11 @@ public class MainActivity extends Activity {
         private static final int CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO;
         private static final int AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT;
         private static final int MAX_RECORD_SECONDS = 30;
+        private static final int DEFAULT_MAX_RECORD_MS = 15000;
+        private static final int DEFAULT_MIN_RECORD_MS = 1000;
+        private static final int DEFAULT_END_SILENCE_MS = 1000;
+        private static final int DEFAULT_ENERGY_THRESHOLD = 420;
+        private static final int DEFAULT_NO_SPEECH_MS = 5000;
 
         private final Activity activity;
         private final WebView webView;
@@ -413,6 +418,11 @@ public class MainActivity extends Activity {
         private volatile boolean recording;
         private AudioRecord audioRecord;
         private Thread recordingThread;
+        private int maxRecordMs = DEFAULT_MAX_RECORD_MS;
+        private int minRecordMs = DEFAULT_MIN_RECORD_MS;
+        private int endSilenceMs = DEFAULT_END_SILENCE_MS;
+        private int energyThreshold = DEFAULT_ENERGY_THRESHOLD;
+        private int noSpeechMs = DEFAULT_NO_SPEECH_MS;
 
         NativeVoiceBridge(Activity activity, WebView webView) {
             this.activity = activity;
@@ -426,6 +436,17 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void start() {
+            startWithConfig(
+                    DEFAULT_MAX_RECORD_MS,
+                    DEFAULT_MIN_RECORD_MS,
+                    DEFAULT_END_SILENCE_MS,
+                    DEFAULT_ENERGY_THRESHOLD,
+                    DEFAULT_NO_SPEECH_MS
+            );
+        }
+
+        @JavascriptInterface
+        public void startWithConfig(int maxMs, int minMs, int silenceMs, int threshold, int noSpeechTimeoutMs) {
             synchronized (lock) {
                 if (recording) {
                     postStatus("录音中，再点麦克风停止");
@@ -441,6 +462,11 @@ public class MainActivity extends Activity {
                     postResult("", "未授予麦克风权限，请允许后重试");
                     return;
                 }
+                maxRecordMs = clamp(maxMs, 1000, MAX_RECORD_SECONDS * 1000);
+                minRecordMs = clamp(minMs, 200, maxRecordMs);
+                endSilenceMs = clamp(silenceMs, 300, 3000);
+                energyThreshold = clamp(threshold, 120, 4000);
+                noSpeechMs = clamp(noSpeechTimeoutMs, 1000, maxRecordMs);
                 recording = true;
                 recordingThread = new Thread(this::recordLoop, "MaoNativeVoiceRecorder");
                 recordingThread.start();
@@ -462,9 +488,18 @@ public class MainActivity extends Activity {
         private void recordLoop() {
             ByteArrayOutputStream pcm = new ByteArrayOutputStream();
             int minBuffer = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT);
-            int bufferSize = Math.max(minBuffer, SAMPLE_RATE);
+            int bufferSize = Math.max(minBuffer, SAMPLE_RATE * 2 / 10);
             byte[] buffer = new byte[bufferSize];
-            int maxBytes = SAMPLE_RATE * 2 * MAX_RECORD_SECONDS;
+            int currentMaxMs = maxRecordMs;
+            int currentMinMs = minRecordMs;
+            int currentSilenceMs = endSilenceMs;
+            int currentThreshold = energyThreshold;
+            int currentNoSpeechMs = noSpeechMs;
+            long startMs;
+            long nowMs;
+            long elapsedMs;
+            long lastSpeechMs;
+            boolean heardSpeech = false;
 
             try {
                 audioRecord = buildAudioRecord(bufferSize, MediaRecorder.AudioSource.VOICE_RECOGNITION);
@@ -477,12 +512,39 @@ public class MainActivity extends Activity {
                 }
 
                 audioRecord.startRecording();
-                postStatus("原生录音中，再点麦克风停止");
-                while (recording && pcm.size() < maxBytes) {
+                postStatus("原生录音中，安静后自动识别");
+                startMs = System.currentTimeMillis();
+                lastSpeechMs = startMs;
+                while (recording) {
                     int read = audioRecord.read(buffer, 0, buffer.length);
+                    nowMs = System.currentTimeMillis();
+                    elapsedMs = nowMs - startMs;
+                    if (read < 0) {
+                        throw new IllegalStateException("录音读取失败: " + read);
+                    }
                     if (read > 0) {
                         pcm.write(buffer, 0, read);
+                        if (averageAbsLevel(buffer, read) >= currentThreshold) {
+                            heardSpeech = true;
+                            lastSpeechMs = nowMs;
+                        }
                     }
+                    if (heardSpeech
+                            && elapsedMs >= currentMinMs
+                            && nowMs - lastSpeechMs >= currentSilenceMs) {
+                        break;
+                    }
+                    if (!heardSpeech && elapsedMs >= currentNoSpeechMs) {
+                        break;
+                    }
+                    if (elapsedMs >= currentMaxMs) {
+                        break;
+                    }
+                }
+                if (!heardSpeech) {
+                    postStatus("没有听到语音");
+                    postResult("", "");
+                    return;
                 }
                 if (pcm.size() < SAMPLE_RATE / 2) {
                     postResult("", "录音太短，请重试");
@@ -496,6 +558,19 @@ public class MainActivity extends Activity {
                 recording = false;
                 releaseRecorder();
             }
+        }
+
+        private int averageAbsLevel(byte[] buffer, int bytesRead) {
+            long sum = 0L;
+            int samples = bytesRead / 2;
+            for (int i = 0; i + 1 < bytesRead; i += 2) {
+                int sample = (buffer[i] & 0xff) | (buffer[i + 1] << 8);
+                if (sample > 32767) {
+                    sample -= 65536;
+                }
+                sum += Math.abs(sample);
+            }
+            return samples <= 0 ? 0 : (int) (sum / samples);
         }
 
         @SuppressWarnings("MissingPermission")
@@ -514,9 +589,25 @@ public class MainActivity extends Activity {
                 return;
             }
             try {
+                if (current.getRecordingState() == AudioRecord.RECORDSTATE_RECORDING) {
+                    current.stop();
+                }
+            } catch (Exception ignored) {
+            }
+            try {
                 current.release();
             } catch (Exception ignored) {
             }
+        }
+
+        private int clamp(int value, int min, int max) {
+            if (value < min) {
+                return min;
+            }
+            if (value > max) {
+                return max;
+            }
+            return value;
         }
 
         private void postStatus(String status) {

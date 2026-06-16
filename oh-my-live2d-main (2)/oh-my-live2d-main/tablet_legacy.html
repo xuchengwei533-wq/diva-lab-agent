@@ -401,9 +401,12 @@
       var preludeEnabled = !truthy(getParam("disablePrelude", "0"));
       var wakePhrase = getParam("wakePhrase", "你好");
       var wakeReplyText = getParam("wakeReplyText", "你好，我在");
+      var pausePhrase = getParam("pausePhrase", "你好老肖");
       var autoListen = !truthy(getParam("disableAutoListen", "0"));
-      var wakeListenMs = parseInt(getParam("wakeListenMs", "3200"), 10) || 3200;
-      var dialogueListenMs = parseInt(getParam("dialogueListenMs", "5000"), 10) || 5000;
+      var wakeListenMs = parseInt(getParam("wakeListenMs", "5200"), 10) || 5200;
+      var dialogueListenMs = parseInt(getParam("dialogueListenMs", "15000"), 10) || 15000;
+      var dialogueNoSpeechMs = parseInt(getParam("dialogueNoSpeechMs", "5000"), 10) || 5000;
+      var nativeVadThreshold = parseInt(getParam("vadThreshold", "420"), 10) || 420;
       var awakened = false;
       var listeningForWake = true;
       var preludePlayed = false;
@@ -494,6 +497,7 @@
         setStatus(text || "");
       };
       window.onNativeVoiceResult = function (base64Pcm, errorText) {
+        clearAutoStopTimer();
         isRecording = false;
         nativeRecording = false;
         mic.innerHTML = "听";
@@ -1038,11 +1042,11 @@
         if (listeningForWake) {
           setStatus("等待唤醒");
           setVoiceHint("请说“" + wakePhrase + "”");
-          startRecording(wakeListenMs);
+          startRecording("wake");
         } else {
           setStatus("请说话");
-          setVoiceHint("老肖已唤醒，请直接提问");
-          startRecording(dialogueListenMs);
+          setVoiceHint("正在聆听，请说完整一句");
+          startRecording("dialogue");
         }
       }
 
@@ -1054,11 +1058,24 @@
         if (isRecording) {
           stopRecording();
         } else {
-          startRecording(awakened ? dialogueListenMs : wakeListenMs);
+          startRecording(awakened ? "dialogue" : "wake");
         }
       }
 
-      function startRecording(durationMs) {
+      function getRecordingConfig(mode) {
+        var isWakeMode = mode === "wake";
+        return {
+          maxMs: isWakeMode ? wakeListenMs : dialogueListenMs,
+          minMs: isWakeMode ? 1400 : 1200,
+          silenceMs: isWakeMode ? 900 : 1100,
+          noSpeechMs: isWakeMode ? wakeListenMs : dialogueNoSpeechMs,
+          threshold: nativeVadThreshold
+        };
+      }
+
+      function startRecording(mode) {
+        var config = getRecordingConfig(mode);
+        var durationMs = config.maxMs;
         var options;
         if (window.AndroidVoice && window.AndroidVoice.start) {
           isRecording = true;
@@ -1067,8 +1084,19 @@
           mic.className = "dockButton dockButtonActive";
           setStatus("正在启动原生录音...");
           try {
-            window.AndroidVoice.start();
-            scheduleAutoStop(durationMs);
+            if (window.AndroidVoice.startWithConfig) {
+              window.AndroidVoice.startWithConfig(
+                config.maxMs,
+                config.minMs,
+                config.silenceMs,
+                config.threshold,
+                config.noSpeechMs
+              );
+              scheduleAutoStop(config.maxMs + 1500);
+            } else {
+              window.AndroidVoice.start();
+              scheduleAutoStop(durationMs);
+            }
             return;
           } catch (nativeError) {
             isRecording = false;
@@ -1284,9 +1312,31 @@
         var target = normalizeWakeText(wakePhrase);
         return (target && normalized.indexOf(target) >= 0)
           || normalized.indexOf("你好") >= 0
+          || normalized.indexOf("您好") >= 0
+          || normalized.indexOf("哈喽") >= 0
+          || normalized.indexOf("哈罗") >= 0
+          || normalized.indexOf("hello") >= 0
           || normalized.indexOf("你好老萧") >= 0
           || normalized.indexOf("你好老肖") >= 0
           || normalized.indexOf("你好老小") >= 0;
+      }
+
+      function containsPausePhrase(text) {
+        var normalized = normalizeWakeText(text);
+        var target = normalizeWakeText(pausePhrase);
+        return (target && normalized.indexOf(target) >= 0)
+          || normalized.indexOf("你好老肖") >= 0
+          || normalized.indexOf("你好老萧") >= 0
+          || normalized.indexOf("你好老小") >= 0;
+      }
+
+      function enterNextListenMode(statusText) {
+        awakened = true;
+        listeningForWake = false;
+        setStatus(statusText || "已进入聆听");
+        setVoiceHint("请说下一句指令");
+        setCaption("我在，正在听。");
+        scheduleListenRestart(250);
       }
 
       function isSleepCommand(text) {
@@ -1321,6 +1371,11 @@
           speak(wakeReplyText, function () {
             scheduleListenRestart(350);
           });
+          return;
+        }
+
+        if (containsPausePhrase(spoken)) {
+          enterNextListenMode("已进入下一轮聆听");
           return;
         }
 
