@@ -433,7 +433,11 @@ def opening_files() -> List[Dict[str, str]]:
 
 @app.get("/")
 async def index() -> FileResponse:
-    return FileResponse(WEB_DIR / "index.html", media_type="text/html; charset=utf-8")
+    return FileResponse(
+        WEB_DIR / "index.html",
+        media_type="text/html; charset=utf-8",
+        headers={"Cache-Control": "no-store, max-age=0", "Pragma": "no-cache"},
+    )
 
 
 @app.get("/health")
