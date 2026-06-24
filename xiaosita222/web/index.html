@@ -223,7 +223,9 @@
       function appUrl(path) {
         if (!path) return path;
         if (/^https?:\/\//i.test(path) || path.indexOf("data:") === 0 || path.indexOf("blob:") === 0) return path;
-        return basePath + String(path).replace(/^\/+/, "");
+        path = String(path);
+        if (basePath !== "/" && path.indexOf(basePath) === 0) return path;
+        return basePath + path.replace(/^\/+/, "");
       }
 
       avatar.src = idleGif;
@@ -384,7 +386,8 @@
       }
 
       function playUrl(url, onDone) {
-        var audio = new Audio(appUrl(url));
+        var finalUrl = appUrl(url);
+        var audio = new Audio(finalUrl);
         activeAudio = audio;
         setSpeaking(true);
         audio.onended = function () {
@@ -395,13 +398,16 @@
         audio.onerror = function () {
           if (activeAudio === audio) activeAudio = null;
           setSpeaking(false);
+          setStatus("音频加载失败: " + finalUrl);
           onDone();
         };
         audio.play()["catch"](function () {
+          setStatus("浏览器拦截了自动播放，请点继续播放");
           tapToResume.style.display = "block";
           tapToResume.onclick = function () {
             tapToResume.style.display = "none";
             audio.play()["catch"](function () {
+              setStatus("音频播放失败: " + finalUrl);
               onDone();
             });
           };
