@@ -224,7 +224,10 @@
         minMs: 620,
         endSilenceMs: 680,
         preRollFrames: 8,
-        minSamples: 16000 * 0.3
+        minSamples: 16000 * 0.3,
+        wakeMinSamples: 16000 * 0.18,
+        wakeEndSilenceMs: 520,
+        wakeMaxMs: 2600
       };
 
       function inferBasePath() {
@@ -350,7 +353,7 @@
         level = rms(input);
         updateMeter(level);
         now = Date.now();
-        threshold = Math.max(config.threshold, noiseRms * 2.7 + 0.004);
+        threshold = Math.max(recordMode === "wake" ? 0.012 : config.threshold, noiseRms * 2.2 + 0.003);
         speechNow = level >= threshold;
 
         if (!inSpeech) {
@@ -376,7 +379,10 @@
         if (speechNow) {
           lastSpeechAt = now;
         }
-        if (chunks.length > 0 && now - speechStartedAt >= config.minMs && now - lastSpeechAt >= config.endSilenceMs) {
+        if (chunks.length > 0
+            && now - speechStartedAt >= (recordMode === "wake" ? 360 : config.minMs)
+            && (now - lastSpeechAt >= (recordMode === "wake" ? config.wakeEndSilenceMs : config.endSilenceMs)
+                || (recordMode === "wake" && now - speechStartedAt >= config.wakeMaxMs))) {
           finalizeUtterance();
         }
       }
@@ -668,7 +674,7 @@
         }
         merged = mergeChunks(chunks);
         resetSpeechBuffer();
-        if (merged.length < config.minSamples) {
+        if (merged.length < (mode === "wake" ? config.wakeMinSamples : config.minSamples)) {
           if (apkWakeMode) {
             if (mode === "interrupt" && activeAudioToken) {
               scheduleListenMode("interrupt", 250);
@@ -717,7 +723,16 @@
           "\u4f60\u597d\u8001\u8096",
           "\u4f60\u597d\u8001\u8427",
           "\u4f60\u597d\u8001\u5c0f",
-          "\u4f60\u597d\u8001\u6d88"
+          "\u4f60\u597d\u8001\u6d88",
+          "\u4f60\u597d\u8001\u5e08",
+          "\u4f60\u597d\u8001\u6821",
+          "\u4f60\u597d",
+          "\u8001\u8096",
+          "\u8001\u8427",
+          "\u8001\u5c0f",
+          "\u8001\u6d88",
+          "\u8001\u5e08",
+          "\u8001\u6821"
         ]);
       }
 
@@ -727,7 +742,9 @@
           "\u4f60\u597d\u8001\u6d88",
           "\u4f60\u597d\u8001\u8096",
           "\u4f60\u597d\u8001\u8427",
-          "\u4f60\u597d\u8001\u5c0f"
+          "\u4f60\u597d\u8001\u5c0f",
+          "\u4f60\u597d\u8001\u5e08",
+          "\u4f60\u597d\u8001\u6821"
         ]);
       }
 
