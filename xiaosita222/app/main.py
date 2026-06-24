@@ -456,6 +456,27 @@ async def get_opening() -> Dict[str, Any]:
     return {"success": True, "text": OPENING_ASSISTANT_TEXT, "files": files, "random": random.choice(files) if files else None}
 
 
+@app.post("/api/asr")
+async def asr(req: TurnRequest) -> Dict[str, Any]:
+    fmt = (req.audio_format or "").lower()
+    if fmt not in ("pcm16le_16k_mono", "pcm16le", "pcm16"):
+        raise HTTPException(status_code=400, detail=f"Unsupported audio_format: {req.audio_format}")
+
+    pcm_bytes = decode_audio_base64(req.audio_data)
+    audio_info = pcm_stats(pcm_bytes)
+    if audio_info["duration_sec"] < 0.15 or (audio_info["peak"] <= 80 and audio_info["rms"] <= 40 and audio_info["zero_frac"] >= 0.98):
+        return {"success": True, "has_text": False, "text": "", "audio_info": audio_info}
+
+    text, asr_meta = await recognize_pcm(pcm_bytes)
+    return {
+        "success": True,
+        "has_text": bool(text),
+        "text": text,
+        "audio_info": audio_info,
+        "asr": asr_meta,
+    }
+
+
 @app.post("/api/turn")
 async def turn(req: TurnRequest) -> Dict[str, Any]:
     fmt = (req.audio_format or "").lower()

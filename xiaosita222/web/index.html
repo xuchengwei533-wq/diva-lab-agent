@@ -205,6 +205,15 @@
       var pendingReply = null;
       var openingDone = true;
       var activeAudio = null;
+      var apkWakeMode = isTruthyParam("apkWake") || isTruthyParam("wakeMode");
+      var wakePhrase = getQueryParam("wakePhrase", "\u4f60\u597d");
+      var wakeReplyText = getQueryParam("wakeReplyText", "\u4f60\u597d\uff0c\u6211\u5728");
+      var awakened = !apkWakeMode;
+      var nativeRecordMode = "";
+      var nativeListenTimer = null;
+      var audioToken = 1;
+      var activeAudioToken = 0;
+      var activeAudioCallback = null;
 
       var config = {
         threshold: 0.018,
@@ -218,6 +227,35 @@
         var path = location.pathname || "/";
         if (path.charAt(path.length - 1) === "/") return path;
         return path.replace(/[^/]*$/, "");
+      }
+
+      function getQueryParam(name, fallback) {
+        var query = (location.search || "").replace(/^\?/, "");
+        var parts = query ? query.split("&") : [];
+        var i;
+        var pair;
+        var key;
+        for (i = 0; i < parts.length; i += 1) {
+          pair = parts[i].split("=");
+          key = decodeURIComponent((pair[0] || "").replace(/\+/g, " "));
+          if (key === name) {
+            return decodeURIComponent((pair.slice(1).join("=") || "").replace(/\+/g, " "));
+          }
+        }
+        return fallback;
+      }
+
+      function isTruthyParam(name) {
+        var value = String(getQueryParam(name, "") || "").toLowerCase();
+        return value === "1" || value === "true" || value === "yes" || value === "on";
+      }
+
+      function hasNativeVoice() {
+        return !!(window.AndroidVoice && window.AndroidVoice.start);
+      }
+
+      function hasNativeAudio() {
+        return !!(window.AndroidAudio && window.AndroidAudio.playUrl);
       }
 
       function appUrl(path) {
@@ -385,33 +423,61 @@
         return appUrl(openingFiles[Math.floor(Math.random() * openingFiles.length)].url);
       }
 
-      function playUrl(url, onDone) {
-        var finalUrl = appUrl(url);
+      function finishAudio(token) {
+        var callback;
+        if (token && activeAudioToken && token !== activeAudioToken) return;
+        activeAudioToken = 0;
+        callback = activeAudioCallback;
+        activeAudioCallback = null;
+        setSpeaking(false);
+        if (callback) callback();
+      }
+
+      function playHtmlUrl(finalUrl, token) {
         var audio = new Audio(finalUrl);
         activeAudio = audio;
         setSpeaking(true);
         audio.onended = function () {
           if (activeAudio === audio) activeAudio = null;
-          setSpeaking(false);
-          onDone();
+          finishAudio(token);
         };
         audio.onerror = function () {
           if (activeAudio === audio) activeAudio = null;
-          setSpeaking(false);
-          setStatus("音频加载失败: " + finalUrl);
-          onDone();
+          setStatus("\u97f3\u9891\u52a0\u8f7d\u5931\u8d25: " + finalUrl);
+          finishAudio(token);
         };
         audio.play()["catch"](function () {
-          setStatus("浏览器拦截了自动播放，请点继续播放");
+          setStatus("\u6d4f\u89c8\u5668\u62e6\u622a\u4e86\u81ea\u52a8\u64ad\u653e\uff0c\u8bf7\u70b9\u7ee7\u7eed\u64ad\u653e");
           tapToResume.style.display = "block";
           tapToResume.onclick = function () {
             tapToResume.style.display = "none";
             audio.play()["catch"](function () {
-              setStatus("音频播放失败: " + finalUrl);
-              onDone();
+              setStatus("\u97f3\u9891\u64ad\u653e\u5931\u8d25: " + finalUrl);
+              finishAudio(token);
             });
           };
         });
+      }
+
+      function playUrl(url, onDone) {
+        var finalUrl = appUrl(url);
+        var token = audioToken += 1;
+        activeAudioToken = token;
+        activeAudioCallback = onDone || function () {};
+        if (hasNativeAudio() && finalUrl.indexOf("data:") !== 0 && finalUrl.indexOf("blob:") !== 0) {
+          setSpeaking(true);
+          try {
+            if (window.AndroidAudio.playUrlWithToken) {
+              window.AndroidAudio.playUrlWithToken(finalUrl, token);
+            } else {
+              window.AndroidAudio.playUrl(finalUrl);
+            }
+            return;
+          } catch (error) {
+            setStatus("\u539f\u751f\u64ad\u653e\u4e0d\u53ef\u7528\uff0c\u6539\u7528\u7f51\u9875\u64ad\u653e");
+          }
+        }
+        playHtmlUrl(finalUrl, token);
       }
 
       function playOpening() {
@@ -448,27 +514,18 @@
 
       function resumeListening() {
         busy = false;
-        listening = true;
         resetSpeechBuffer();
         setSpeaking(false);
+        if (apkWakeMode && hasNativeVoice()) {
+          listening = false;
+          scheduleNativeListen(awakened ? "dialogue" : "wake", awakened ? 350 : 650);
+          return;
+        }
+        listening = true;
         setStatus("正在等待你说话...");
       }
 
-      function finalizeUtterance() {
-        var merged;
-        var pcm16k;
-        var payload;
-        if (!inSpeech || busy) return;
-        listening = false;
-        busy = true;
-        merged = mergeChunks(chunks);
-        resetSpeechBuffer();
-        if (merged.length < config.minSamples) {
-          resumeListening();
-          return;
-        }
-        pcm16k = resampleTo16k(merged, audioContext.sampleRate);
-        payload = floatToPcm16Base64(pcm16k);
+      function sendTurnPayload(payload) {
         showRecognized("");
         setStatus("已经听到，正在思考...");
         playOpening();
@@ -490,6 +547,7 @@
             setCaption("我没有听清，请再说一遍。");
             pendingReply = null;
             openingDone = true;
+            if (apkWakeMode) awakened = false;
             resumeListening();
             return;
           }
@@ -504,11 +562,194 @@
           setCaption("链路出错：" + error.message);
           pendingReply = null;
           openingDone = true;
+          if (apkWakeMode) awakened = false;
           resumeListening();
         });
       }
 
+      function finalizeUtterance() {
+        var merged;
+        var pcm16k;
+        var payload;
+        if (!inSpeech || busy) return;
+        listening = false;
+        busy = true;
+        merged = mergeChunks(chunks);
+        resetSpeechBuffer();
+        if (merged.length < config.minSamples) {
+          resumeListening();
+          return;
+        }
+        pcm16k = resampleTo16k(merged, audioContext.sampleRate);
+        payload = floatToPcm16Base64(pcm16k);
+        sendTurnPayload(payload);
+      }
+
+      function normalizeWakeText(value) {
+        return String(value || "").toLowerCase().replace(/[^\u4e00-\u9fa5a-z0-9]/g, "");
+      }
+
+      function containsWakePhrase(text) {
+        var normalized = normalizeWakeText(text);
+        var target = normalizeWakeText(wakePhrase);
+        return (target && normalized.indexOf(target) >= 0)
+          || normalized.indexOf("\u4f60\u597d") >= 0
+          || normalized.indexOf("\u60a8\u597d") >= 0
+          || normalized.indexOf("hello") >= 0;
+      }
+
+      function scheduleNativeListen(mode, delayMs) {
+        if (!apkWakeMode || !hasNativeVoice()) return;
+        if (nativeListenTimer) clearTimeout(nativeListenTimer);
+        nativeListenTimer = setTimeout(function () {
+          nativeListenTimer = null;
+          startNativeRecording(mode);
+        }, delayMs || 0);
+      }
+
+      function startNativeRecording(mode) {
+        var isWake = mode === "wake";
+        if (!apkWakeMode || !hasNativeVoice()) return;
+        if (busy || activeAudioToken || nativeRecordMode) {
+          scheduleNativeListen(mode, 500);
+          return;
+        }
+        nativeRecordMode = mode;
+        try {
+          if (isWake) {
+            setCaption("\u8bf7\u8bf4\u201c" + wakePhrase + "\u201d\u5524\u9192\u6211");
+            setStatus("");
+          } else {
+            setStatus("\u6b63\u5728\u8046\u542c...");
+          }
+          if (window.AndroidVoice.startWithConfig) {
+            window.AndroidVoice.startWithConfig(
+              isWake ? 4200 : 9000,
+              isWake ? 650 : 650,
+              isWake ? 650 : 680,
+              320,
+              isWake ? 3000 : 5200
+            );
+          } else {
+            window.AndroidVoice.start();
+          }
+        } catch (error) {
+          nativeRecordMode = "";
+          setStatus("\u539f\u751f\u5f55\u97f3\u4e0d\u53ef\u7528: " + error.message);
+          scheduleNativeListen(mode, 1200);
+        }
+      }
+
+      function playWakeReply(onDone) {
+        fetch(appUrl("api/tts"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: wakeReplyText, language: "zh" })
+        }).then(function (response) {
+          return response.json().then(function (data) {
+            if (!response.ok) throw new Error(data.detail || data.message || ("HTTP " + response.status));
+            return data;
+          });
+        }).then(function (data) {
+          var audioUrl = appUrl(data.proxy_audio_url || data.audio_url || "");
+          if (!audioUrl) {
+            onDone();
+            return;
+          }
+          playUrl(audioUrl, onDone);
+        })["catch"](function () {
+          onDone();
+        });
+      }
+
+      function handleWakePayload(payload) {
+        fetch(appUrl("api/asr"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            audio_data: payload,
+            audio_format: "pcm16le_16k_mono"
+          })
+        }).then(function (response) {
+          return response.json().then(function (data) {
+            if (!response.ok) throw new Error(data.detail || data.message || ("HTTP " + response.status));
+            return data;
+          });
+        }).then(function (data) {
+          var text = data.text || "";
+          if (!containsWakePhrase(text)) {
+            showRecognized("");
+            scheduleNativeListen("wake", 350);
+            return;
+          }
+          awakened = true;
+          showRecognized(text);
+          setCaption(wakeReplyText);
+          setStatus("");
+          playWakeReply(function () {
+            scheduleNativeListen("dialogue", 300);
+          });
+        })["catch"](function () {
+          scheduleNativeListen("wake", 800);
+        });
+      }
+
+      function handleNativeVoicePayload(payload) {
+        busy = true;
+        listening = false;
+        sendTurnPayload(payload);
+      }
+
+      window.onNativeVoiceStatus = function (text) {
+        if (!apkWakeMode && text) setStatus(text);
+      };
+
+      window.onNativeVoiceResult = function (base64Pcm, errorText) {
+        var mode = nativeRecordMode || (awakened ? "dialogue" : "wake");
+        nativeRecordMode = "";
+        if (!apkWakeMode) return;
+        if (errorText || !base64Pcm) {
+          if (mode === "dialogue") {
+            awakened = false;
+            setCaption("\u8bf7\u8bf4\u201c" + wakePhrase + "\u201d\u5524\u9192\u6211");
+            scheduleNativeListen("wake", 500);
+          } else {
+            scheduleNativeListen("wake", 350);
+          }
+          return;
+        }
+        if (mode === "wake") {
+          handleWakePayload(base64Pcm);
+          return;
+        }
+        handleNativeVoicePayload(base64Pcm);
+      };
+
+      window.onNativeAudioStatus = function (text) {
+        if (!apkWakeMode && text) setStatus(text);
+      };
+
+      window.onNativeAudioEnded = function (token) {
+        finishAudio(parseInt(token, 10) || activeAudioToken);
+      };
+
+      window.onNativeAudioError = function (errorText, token) {
+        var parsedToken = parseInt(token, 10) || activeAudioToken;
+        if (parsedToken && activeAudioToken && parsedToken !== activeAudioToken) return;
+        setStatus("\u97f3\u9891\u64ad\u653e\u5931\u8d25: " + (errorText || ""));
+        finishAudio(parsedToken);
+      };
+
       function startAudio() {
+        if (apkWakeMode && hasNativeVoice()) {
+          overlay.style.display = "none";
+          busy = false;
+          listening = false;
+          awakened = false;
+          resetSpeechBuffer();
+          scheduleNativeListen("wake", 200);
+          return;
+        }
         var AudioContextClass = window.AudioContext || window.webkitAudioContext;
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !AudioContextClass) {
           setStatus("当前浏览器不支持网页录音");
@@ -549,6 +790,9 @@
       });
 
       startButton.onclick = startAudio;
+      if (apkWakeMode && hasNativeVoice()) {
+        setTimeout(startAudio, 700);
+      }
     })();
   </script>
 </body>
