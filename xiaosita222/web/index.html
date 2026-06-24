@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>肖斯塔科维奇</title>
+  <style>
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      background: #050505;
+      color: #f7f1e4;
+      font-family: "Noto Sans SC", "Microsoft YaHei", Arial, sans-serif;
+      overflow: hidden;
+    }
+
+    #app {
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(circle at 50% 35%, #26211c 0, #080808 56%, #000 100%);
+    }
+
+    #avatar {
+      position: absolute;
+      left: 50%;
+      bottom: 0;
+      height: 100vh;
+      min-width: 100vw;
+      object-fit: contain;
+      transform: translateX(-50%);
+      filter: contrast(1.04) saturate(0.95);
+      pointer-events: none;
+    }
+
+    #shade {
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(90deg, rgba(0, 0, 0, 0.68), rgba(0, 0, 0, 0.08) 34%, rgba(0, 0, 0, 0.28)),
+        linear-gradient(0deg, rgba(0, 0, 0, 0.78), rgba(0, 0, 0, 0) 36%);
+      pointer-events: none;
+    }
+
+    #topStatus {
+      position: absolute;
+      top: 18px;
+      left: 18px;
+      max-width: min(560px, calc(100vw - 36px));
+      padding: 10px 14px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: rgba(8, 8, 8, 0.62);
+      backdrop-filter: blur(10px);
+      border-radius: 8px;
+      font-size: 15px;
+      line-height: 1.35;
+    }
+
+    #meterWrap {
+      position: absolute;
+      left: 18px;
+      top: 66px;
+      width: 184px;
+      height: 5px;
+      background: rgba(255, 255, 255, 0.16);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    #meter {
+      width: 0%;
+      height: 100%;
+      background: #d7b56d;
+      border-radius: inherit;
+      transition: width 80ms linear;
+    }
+
+    #caption {
+      position: absolute;
+      left: 50%;
+      bottom: 34px;
+      width: min(860px, calc(100vw - 40px));
+      transform: translateX(-50%);
+      padding: 14px 18px;
+      box-sizing: border-box;
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.64);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      color: #fffaf0;
+      font-size: 20px;
+      line-height: 1.45;
+      text-align: center;
+      text-shadow: 0 1px 2px #000;
+    }
+
+    #recognized {
+      position: absolute;
+      right: 18px;
+      top: 18px;
+      max-width: min(430px, calc(100vw - 36px));
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: rgba(255, 255, 255, 0.86);
+      font-size: 14px;
+      line-height: 1.4;
+      display: none;
+    }
+
+    #overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.72);
+      z-index: 5;
+    }
+
+    #startButton {
+      border: 1px solid rgba(255, 255, 255, 0.24);
+      background: #f1d38a;
+      color: #15110a;
+      border-radius: 8px;
+      padding: 15px 24px;
+      font-size: 20px;
+      font-weight: 700;
+      box-shadow: 0 18px 54px rgba(0, 0, 0, 0.38);
+    }
+
+    #tapToResume {
+      position: absolute;
+      right: 18px;
+      bottom: 106px;
+      display: none;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      background: rgba(241, 211, 138, 0.94);
+      color: #15110a;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 15px;
+      font-weight: 700;
+      z-index: 4;
+    }
+
+    @media (max-width: 680px) {
+      #recognized {
+        left: 18px;
+        right: auto;
+        top: 90px;
+      }
+
+      #caption {
+        bottom: 22px;
+        font-size: 17px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main id="app">
+    <img id="avatar" src="assets/avatar/idle.gif" alt="">
+    <div id="shade"></div>
+    <div id="topStatus">点击启动后，直接说话即可。</div>
+    <div id="meterWrap"><div id="meter"></div></div>
+    <div id="recognized"></div>
+    <div id="caption">我是肖斯塔科维奇，欢迎走进我的故事</div>
+    <button id="tapToResume" type="button">继续播放</button>
+    <div id="overlay">
+      <button id="startButton" type="button">启动语音交互</button>
+    </div>
+  </main>
+
+  <script>
+    (function () {
+      var avatar = document.getElementById("avatar");
+      var statusEl = document.getElementById("topStatus");
+      var caption = document.getElementById("caption");
+      var recognized = document.getElementById("recognized");
+      var meter = document.getElementById("meter");
+      var overlay = document.getElementById("overlay");
+      var startButton = document.getElementById("startButton");
+      var tapToResume = document.getElementById("tapToResume");
+
+      var basePath = inferBasePath();
+      var idleGif = appUrl("assets/avatar/idle.gif");
+      var speakingGif = appUrl("assets/avatar/speaking.gif");
+      var openingFiles = [];
+      var sessionId = "";
+      var audioContext = null;
+      var micStream = null;
+      var sourceNode = null;
+      var processorNode = null;
+      var listening = false;
+      var busy = false;
+      var preRoll = [];
+      var chunks = [];
+      var inSpeech = false;
+      var speechFrames = 0;
+      var speechStartedAt = 0;
+      var lastSpeechAt = 0;
+      var noiseRms = 0.008;
+      var pendingReply = null;
+      var openingDone = true;
+      var activeAudio = null;
+
+      var config = {
+        threshold: 0.018,
+        minMs: 620,
+        endSilenceMs: 680,
+        preRollFrames: 8,
+        minSamples: 16000 * 0.3
+      };
+
+      function inferBasePath() {
+        var path = location.pathname || "/";
+        if (path.charAt(path.length - 1) === "/") return path;
+        return path.replace(/[^/]*$/, "");
+      }
+
+      function appUrl(path) {
+        if (!path) return path;
+        if (/^https?:\/\//i.test(path) || path.indexOf("data:") === 0 || path.indexOf("blob:") === 0) return path;
+        return basePath + String(path).replace(/^\/+/, "");
+      }
+
+      avatar.src = idleGif;
+
+      function setStatus(text) {
+        statusEl.textContent = text || "";
+      }
+
+      function setCaption(text) {
+        caption.textContent = text || "";
+      }
+
+      function setSpeaking(value) {
+        avatar.src = value ? speakingGif : idleGif;
+      }
+
+      function showRecognized(text) {
+        if (!text) {
+          recognized.style.display = "none";
+          recognized.textContent = "";
+          return;
+        }
+        recognized.style.display = "block";
+        recognized.textContent = "你说：" + text;
+      }
+
+      function copyFloat32(input) {
+        var out = new Float32Array(input.length);
+        out.set(input);
+        return out;
+      }
+
+      function rms(input) {
+        var sum = 0;
+        var i;
+        for (i = 0; i < input.length; i += 1) {
+          sum += input[i] * input[i];
+        }
+        return Math.sqrt(sum / Math.max(1, input.length));
+      }
+
+      function updateMeter(value) {
+        var percent = Math.max(0, Math.min(100, Math.round(value * 850)));
+        meter.style.width = percent + "%";
+      }
+
+      function pushPreRoll(frame) {
+        preRoll.push(frame);
+        while (preRoll.length > config.preRollFrames) preRoll.shift();
+      }
+
+      function resetSpeechBuffer() {
+        chunks = [];
+        preRoll = [];
+        inSpeech = false;
+        speechFrames = 0;
+        speechStartedAt = 0;
+        lastSpeechAt = 0;
+      }
+
+      function onAudioProcess(event) {
+        var input;
+        var level;
+        var now;
+        var threshold;
+        var speechNow;
+        if (!listening || busy) return;
+        input = event.inputBuffer.getChannelData(0);
+        level = rms(input);
+        updateMeter(level);
+        now = Date.now();
+        threshold = Math.max(config.threshold, noiseRms * 2.7 + 0.004);
+        speechNow = level >= threshold;
+
+        if (!inSpeech) {
+          pushPreRoll(copyFloat32(input));
+          if (speechNow) {
+            speechFrames += 1;
+            if (speechFrames >= 2) {
+              inSpeech = true;
+              speechStartedAt = now;
+              lastSpeechAt = now;
+              chunks = preRoll.slice(0);
+              preRoll = [];
+              setStatus("正在聆听...");
+            }
+          } else {
+            speechFrames = 0;
+            noiseRms = noiseRms * 0.96 + level * 0.04;
+          }
+          return;
+        }
+
+        chunks.push(copyFloat32(input));
+        if (speechNow) {
+          lastSpeechAt = now;
+        }
+        if (chunks.length > 0 && now - speechStartedAt >= config.minMs && now - lastSpeechAt >= config.endSilenceMs) {
+          finalizeUtterance();
+        }
+      }
+
+      function mergeChunks(items) {
+        var total = 0;
+        var merged;
+        var offset = 0;
+        var i;
+        for (i = 0; i < items.length; i += 1) total += items[i].length;
+        merged = new Float32Array(total);
+        for (i = 0; i < items.length; i += 1) {
+          merged.set(items[i], offset);
+          offset += items[i].length;
+        }
+        return merged;
+      }
+
+      function resampleTo16k(input, sourceRate) {
+        var targetRate = 16000;
+        var ratio = sourceRate / targetRate;
+        var length = Math.max(1, Math.round(input.length / ratio));
+        var output = new Float32Array(length);
+        var i;
+        var pos;
+        var left;
+        var right;
+        var frac;
+        for (i = 0; i < length; i += 1) {
+          pos = i * ratio;
+          left = Math.floor(pos);
+          right = Math.min(input.length - 1, left + 1);
+          frac = pos - left;
+          output[i] = input[left] * (1 - frac) + input[right] * frac;
+        }
+        return output;
+      }
+
+      function floatToPcm16Base64(floatData) {
+        var buffer = new ArrayBuffer(floatData.length * 2);
+        var view = new DataView(buffer);
+        var binary = "";
+        var bytes;
+        var i;
+        var sample;
+        for (i = 0; i < floatData.length; i += 1) {
+          sample = Math.max(-1, Math.min(1, floatData[i]));
+          view.setInt16(i * 2, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+        }
+        bytes = new Uint8Array(buffer);
+        for (i = 0; i < bytes.length; i += 1) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary);
+      }
+
+      function currentOpeningUrl() {
+        if (!openingFiles.length) return "";
+        return appUrl(openingFiles[Math.floor(Math.random() * openingFiles.length)].url);
+      }
+
+      function playUrl(url, onDone) {
+        var audio = new Audio(appUrl(url));
+        activeAudio = audio;
+        setSpeaking(true);
+        audio.onended = function () {
+          if (activeAudio === audio) activeAudio = null;
+          setSpeaking(false);
+          onDone();
+        };
+        audio.onerror = function () {
+          if (activeAudio === audio) activeAudio = null;
+          setSpeaking(false);
+          onDone();
+        };
+        audio.play()["catch"](function () {
+          tapToResume.style.display = "block";
+          tapToResume.onclick = function () {
+            tapToResume.style.display = "none";
+            audio.play()["catch"](function () {
+              onDone();
+            });
+          };
+        });
+      }
+
+      function playOpening() {
+        var url = currentOpeningUrl();
+        openingDone = false;
+        if (!url) {
+          openingDone = true;
+          maybePlayReply();
+          return;
+        }
+        setStatus("先播放开场白...");
+        playUrl(url, function () {
+          openingDone = true;
+          maybePlayReply();
+        });
+      }
+
+      function maybePlayReply() {
+        var reply;
+        if (!openingDone || !pendingReply) return;
+        reply = pendingReply;
+        pendingReply = null;
+        if (!reply.audioUrl) {
+          setStatus("没有拿到语音，继续聆听");
+          resumeListening();
+          return;
+        }
+        setCaption(reply.text);
+        setStatus("正在回答...");
+        playUrl(reply.audioUrl, function () {
+          resumeListening();
+        });
+      }
+
+      function resumeListening() {
+        busy = false;
+        listening = true;
+        resetSpeechBuffer();
+        setSpeaking(false);
+        setStatus("正在等待你说话...");
+      }
+
+      function finalizeUtterance() {
+        var merged;
+        var pcm16k;
+        var payload;
+        if (!inSpeech || busy) return;
+        listening = false;
+        busy = true;
+        merged = mergeChunks(chunks);
+        resetSpeechBuffer();
+        if (merged.length < config.minSamples) {
+          resumeListening();
+          return;
+        }
+        pcm16k = resampleTo16k(merged, audioContext.sampleRate);
+        payload = floatToPcm16Base64(pcm16k);
+        showRecognized("");
+        setStatus("已经听到，正在思考...");
+        playOpening();
+        fetch(appUrl("api/turn"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            audio_data: payload,
+            audio_format: "pcm16le_16k_mono",
+            session_id: sessionId
+          })
+        }).then(function (response) {
+          return response.json().then(function (data) {
+            if (!response.ok) throw new Error(data.detail || data.message || ("HTTP " + response.status));
+            return data;
+          });
+        }).then(function (data) {
+          if (!data.has_text) {
+            setCaption("我没有听清，请再说一遍。");
+            pendingReply = null;
+            openingDone = true;
+            resumeListening();
+            return;
+          }
+          sessionId = data.session_id || sessionId;
+          showRecognized(data.text || "");
+          pendingReply = {
+            text: data.reply || "",
+            audioUrl: appUrl(data.proxy_audio_url || data.audio_url || "")
+          };
+          maybePlayReply();
+        })["catch"](function (error) {
+          setCaption("链路出错：" + error.message);
+          pendingReply = null;
+          openingDone = true;
+          resumeListening();
+        });
+      }
+
+      function startAudio() {
+        var AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !AudioContextClass) {
+          setStatus("当前浏览器不支持网页录音");
+          return;
+        }
+        audioContext = audioContext || new AudioContextClass();
+        if (audioContext.state === "suspended" && audioContext.resume) {
+          audioContext.resume();
+        }
+        navigator.mediaDevices.getUserMedia({
+          audio: {
+            channelCount: 1,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        }).then(function (stream) {
+          micStream = stream;
+          sourceNode = audioContext.createMediaStreamSource(stream);
+          processorNode = audioContext.createScriptProcessor(4096, 1, 1);
+          processorNode.onaudioprocess = onAudioProcess;
+          sourceNode.connect(processorNode);
+          processorNode.connect(audioContext.destination);
+          overlay.style.display = "none";
+          setStatus("正在等待你说话...");
+          listening = true;
+        })["catch"](function (error) {
+          setStatus("麦克风不可用：" + error.message);
+        });
+      }
+
+      fetch(appUrl("api/opening")).then(function (response) {
+        return response.json();
+      }).then(function (data) {
+        openingFiles = data.files || [];
+      })["catch"](function () {
+        openingFiles = [];
+      });
+
+      startButton.onclick = startAudio;
+    })();
+  </script>
+</body>
+</html>
