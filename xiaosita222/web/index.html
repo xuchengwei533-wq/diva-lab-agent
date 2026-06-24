@@ -206,7 +206,8 @@
       var openingDone = true;
       var activeAudio = null;
       var apkWakeMode = isTruthyParam("apkWake") || isTruthyParam("wakeMode");
-      var wakePhrase = getQueryParam("wakePhrase", "\u4f60\u597d");
+      var wakePhrase = getQueryParam("wakePhrase", "\u4f60\u597d\u8001\u8096");
+      var interruptPhrase = getQueryParam("interruptPhrase", "\u4f60\u597d\u8001\u6d88");
       var wakeReplyText = getQueryParam("wakeReplyText", "\u4f60\u597d\uff0c\u6211\u5728");
       var awakened = !apkWakeMode;
       var nativeRecordMode = "";
@@ -214,6 +215,7 @@
       var audioToken = 1;
       var activeAudioToken = 0;
       var activeAudioCallback = null;
+      var activeTurnId = 0;
 
       var config = {
         threshold: 0.018,
@@ -267,6 +269,12 @@
       }
 
       avatar.src = idleGif;
+      if (apkWakeMode) {
+        overlay.style.display = "none";
+        startButton.style.display = "none";
+        setCaption("\u8bf7\u8bf4\u201c" + wakePhrase + "\u201d\u5524\u9192\u6211");
+        setStatus("");
+      }
 
       function setStatus(text) {
         statusEl.textContent = text || "";
@@ -433,6 +441,55 @@
         if (callback) callback();
       }
 
+      function stopActiveAudio() {
+        if (activeAudio) {
+          try { activeAudio.pause(); } catch (ignore) {}
+          try { activeAudio.src = ""; } catch (ignore2) {}
+          activeAudio = null;
+        }
+        if (hasNativeAudio() && window.AndroidAudio.stop) {
+          try { window.AndroidAudio.stop(); } catch (ignore3) {}
+        }
+        activeAudioToken = 0;
+        activeAudioCallback = null;
+        setSpeaking(false);
+      }
+
+      function enterSleepState() {
+        awakened = false;
+        busy = false;
+        pendingReply = null;
+        openingDone = true;
+        activeTurnId += 1;
+        nativeRecordMode = "";
+        if (nativeListenTimer) {
+          clearTimeout(nativeListenTimer);
+          nativeListenTimer = null;
+        }
+        resetSpeechBuffer();
+        setSpeaking(false);
+        setStatus("");
+        setCaption("\u8bf7\u8bf4\u201c" + wakePhrase + "\u201d\u5524\u9192\u6211");
+        scheduleNativeListen("wake", 350);
+      }
+
+      function cancelActiveResponse() {
+        activeTurnId += 1;
+        pendingReply = null;
+        openingDone = true;
+        busy = false;
+        awakened = true;
+        nativeRecordMode = "";
+        if (nativeListenTimer) {
+          clearTimeout(nativeListenTimer);
+          nativeListenTimer = null;
+        }
+        stopActiveAudio();
+        setCaption("\u5df2\u6253\u65ad\uff0c\u8bf7\u7ee7\u7eed\u8bf4");
+        setStatus("");
+        scheduleNativeListen("dialogue", 250);
+      }
+
       function playHtmlUrl(finalUrl, token) {
         var audio = new Audio(finalUrl);
         activeAudio = audio;
@@ -472,12 +529,18 @@
             } else {
               window.AndroidAudio.playUrl(finalUrl);
             }
+            if (apkWakeMode && awakened) {
+              scheduleNativeListen("interrupt", 350);
+            }
             return;
           } catch (error) {
             setStatus("\u539f\u751f\u64ad\u653e\u4e0d\u53ef\u7528\uff0c\u6539\u7528\u7f51\u9875\u64ad\u653e");
           }
         }
         playHtmlUrl(finalUrl, token);
+        if (apkWakeMode && awakened) {
+          scheduleNativeListen("interrupt", 350);
+        }
       }
 
       function playOpening() {
@@ -526,6 +589,7 @@
       }
 
       function sendTurnPayload(payload) {
+        var turnId = activeTurnId += 1;
         showRecognized("");
         setStatus("已经听到，正在思考...");
         playOpening();
@@ -543,12 +607,16 @@
             return data;
           });
         }).then(function (data) {
+          if (turnId !== activeTurnId) return;
           if (!data.has_text) {
             setCaption("我没有听清，请再说一遍。");
             pendingReply = null;
             openingDone = true;
-            if (apkWakeMode) awakened = false;
-            resumeListening();
+            if (apkWakeMode) {
+              enterSleepState();
+            } else {
+              resumeListening();
+            }
             return;
           }
           sessionId = data.session_id || sessionId;
@@ -559,11 +627,15 @@
           };
           maybePlayReply();
         })["catch"](function (error) {
+          if (turnId !== activeTurnId) return;
           setCaption("链路出错：" + error.message);
           pendingReply = null;
           openingDone = true;
-          if (apkWakeMode) awakened = false;
-          resumeListening();
+          if (apkWakeMode) {
+            enterSleepState();
+          } else {
+            resumeListening();
+          }
         });
       }
 
@@ -589,13 +661,35 @@
         return String(value || "").toLowerCase().replace(/[^\u4e00-\u9fa5a-z0-9]/g, "");
       }
 
-      function containsWakePhrase(text) {
+      function matchesAnyPhrase(text, phrases) {
         var normalized = normalizeWakeText(text);
-        var target = normalizeWakeText(wakePhrase);
-        return (target && normalized.indexOf(target) >= 0)
-          || normalized.indexOf("\u4f60\u597d") >= 0
-          || normalized.indexOf("\u60a8\u597d") >= 0
-          || normalized.indexOf("hello") >= 0;
+        var i;
+        var target;
+        for (i = 0; i < phrases.length; i += 1) {
+          target = normalizeWakeText(phrases[i]);
+          if (target && normalized.indexOf(target) >= 0) return true;
+        }
+        return false;
+      }
+
+      function containsWakePhrase(text) {
+        return matchesAnyPhrase(text, [
+          wakePhrase,
+          "\u4f60\u597d\u8001\u8096",
+          "\u4f60\u597d\u8001\u8427",
+          "\u4f60\u597d\u8001\u5c0f",
+          "\u4f60\u597d\u8001\u6d88"
+        ]);
+      }
+
+      function containsInterruptPhrase(text) {
+        return matchesAnyPhrase(text, [
+          interruptPhrase,
+          "\u4f60\u597d\u8001\u6d88",
+          "\u4f60\u597d\u8001\u8096",
+          "\u4f60\u597d\u8001\u8427",
+          "\u4f60\u597d\u8001\u5c0f"
+        ]);
       }
 
       function scheduleNativeListen(mode, delayMs) {
@@ -609,8 +703,14 @@
 
       function startNativeRecording(mode) {
         var isWake = mode === "wake";
+        var isInterrupt = mode === "interrupt";
         if (!apkWakeMode || !hasNativeVoice()) return;
-        if (busy || activeAudioToken || nativeRecordMode) {
+        if (nativeRecordMode) {
+          scheduleNativeListen(mode, 500);
+          return;
+        }
+        if (isInterrupt && !activeAudioToken) return;
+        if (!isInterrupt && (busy || activeAudioToken)) {
           scheduleNativeListen(mode, 500);
           return;
         }
@@ -619,16 +719,18 @@
           if (isWake) {
             setCaption("\u8bf7\u8bf4\u201c" + wakePhrase + "\u201d\u5524\u9192\u6211");
             setStatus("");
+          } else if (isInterrupt) {
+            setStatus("");
           } else {
             setStatus("\u6b63\u5728\u8046\u542c...");
           }
           if (window.AndroidVoice.startWithConfig) {
             window.AndroidVoice.startWithConfig(
-              isWake ? 4200 : 9000,
-              isWake ? 650 : 650,
-              isWake ? 650 : 680,
-              320,
-              isWake ? 3000 : 5200
+              isWake ? 4600 : (isInterrupt ? 2600 : 9000),
+              isWake ? 650 : (isInterrupt ? 420 : 650),
+              isWake ? 700 : (isInterrupt ? 520 : 680),
+              isInterrupt ? 420 : 320,
+              isWake ? 3400 : (isInterrupt ? 2400 : 5200)
             );
           } else {
             window.AndroidVoice.start();
@@ -694,6 +796,36 @@
         });
       }
 
+      function handleInterruptPayload(payload) {
+        fetch(appUrl("api/asr"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            audio_data: payload,
+            audio_format: "pcm16le_16k_mono"
+          })
+        }).then(function (response) {
+          return response.json().then(function (data) {
+            if (!response.ok) throw new Error(data.detail || data.message || ("HTTP " + response.status));
+            return data;
+          });
+        }).then(function (data) {
+          var text = data.text || "";
+          if (containsInterruptPhrase(text)) {
+            showRecognized(text);
+            cancelActiveResponse();
+            return;
+          }
+          if (activeAudioToken) {
+            scheduleNativeListen("interrupt", 250);
+          }
+        })["catch"](function () {
+          if (activeAudioToken) {
+            scheduleNativeListen("interrupt", 500);
+          }
+        });
+      }
+
       function handleNativeVoicePayload(payload) {
         busy = true;
         listening = false;
@@ -709,10 +841,12 @@
         nativeRecordMode = "";
         if (!apkWakeMode) return;
         if (errorText || !base64Pcm) {
+          if (mode === "interrupt") {
+            if (activeAudioToken) scheduleNativeListen("interrupt", 250);
+            return;
+          }
           if (mode === "dialogue") {
-            awakened = false;
-            setCaption("\u8bf7\u8bf4\u201c" + wakePhrase + "\u201d\u5524\u9192\u6211");
-            scheduleNativeListen("wake", 500);
+            enterSleepState();
           } else {
             scheduleNativeListen("wake", 350);
           }
@@ -720,6 +854,10 @@
         }
         if (mode === "wake") {
           handleWakePayload(base64Pcm);
+          return;
+        }
+        if (mode === "interrupt") {
+          handleInterruptPayload(base64Pcm);
           return;
         }
         handleNativeVoicePayload(base64Pcm);
