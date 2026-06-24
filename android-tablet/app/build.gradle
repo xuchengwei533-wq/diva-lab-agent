@@ -11,9 +11,9 @@ android {
         applicationId "com.maozhishi.tablet"
         minSdk 21
         targetSdk 35
-        versionCode 15
-        versionName "0.15.0-lan-vad-wake"
-        buildConfigField "String", "DEFAULT_PAGE_URL", "\"http://192.168.5.204:8000/tablet_legacy.html?singleOrigin=1&publicMode=1&voiceMode=1&apkVersion=15\""
+        versionCode 19
+        versionName "0.19.0-xiaosita222-wake"
+        buildConfigField "String", "DEFAULT_PAGE_URL", "\"https://test.diva-ai.cn/xiaosita222/?singleOrigin=1&publicMode=1&voiceMode=1&apkWake=1&wakePhrase=%E4%BD%A0%E5%A5%BD&apkVersion=19\""
     }
 
     buildFeatures {
