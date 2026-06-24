@@ -227,7 +227,10 @@
         minSamples: 16000 * 0.3,
         wakeMinSamples: 16000 * 0.18,
         wakeEndSilenceMs: 520,
-        wakeMaxMs: 2600
+        wakeMaxMs: 2600,
+        interruptMinSamples: 16000 * 0.15,
+        interruptEndSilenceMs: 420,
+        interruptMaxMs: 1800
       };
 
       function inferBasePath() {
@@ -353,7 +356,7 @@
         level = rms(input);
         updateMeter(level);
         now = Date.now();
-        threshold = Math.max(recordMode === "wake" ? 0.012 : config.threshold, noiseRms * 2.2 + 0.003);
+        threshold = Math.max((recordMode === "wake" || recordMode === "interrupt") ? 0.012 : config.threshold, noiseRms * 2.2 + 0.003);
         speechNow = level >= threshold;
 
         if (!inSpeech) {
@@ -380,9 +383,10 @@
           lastSpeechAt = now;
         }
         if (chunks.length > 0
-            && now - speechStartedAt >= (recordMode === "wake" ? 360 : config.minMs)
-            && (now - lastSpeechAt >= (recordMode === "wake" ? config.wakeEndSilenceMs : config.endSilenceMs)
-                || (recordMode === "wake" && now - speechStartedAt >= config.wakeMaxMs))) {
+            && now - speechStartedAt >= (recordMode === "wake" ? 360 : (recordMode === "interrupt" ? 280 : config.minMs))
+            && (now - lastSpeechAt >= (recordMode === "wake" ? config.wakeEndSilenceMs : (recordMode === "interrupt" ? config.interruptEndSilenceMs : config.endSilenceMs))
+                || (recordMode === "wake" && now - speechStartedAt >= config.wakeMaxMs)
+                || (recordMode === "interrupt" && now - speechStartedAt >= config.interruptMaxMs))) {
           finalizeUtterance();
         }
       }
@@ -674,7 +678,7 @@
         }
         merged = mergeChunks(chunks);
         resetSpeechBuffer();
-        if (merged.length < (mode === "wake" ? config.wakeMinSamples : config.minSamples)) {
+        if (merged.length < (mode === "wake" ? config.wakeMinSamples : (mode === "interrupt" ? config.interruptMinSamples : config.minSamples))) {
           if (apkWakeMode) {
             if (mode === "interrupt" && activeAudioToken) {
               scheduleListenMode("interrupt", 250);
@@ -737,14 +741,21 @@
       }
 
       function containsInterruptPhrase(text) {
-        return matchesAnyPhrase(text, [
+        return containsWakePhrase(text) || matchesAnyPhrase(text, [
           interruptPhrase,
           "\u4f60\u597d\u8001\u6d88",
           "\u4f60\u597d\u8001\u8096",
           "\u4f60\u597d\u8001\u8427",
           "\u4f60\u597d\u8001\u5c0f",
           "\u4f60\u597d\u8001\u5e08",
-          "\u4f60\u597d\u8001\u6821"
+          "\u4f60\u597d\u8001\u6821",
+          "\u4f60\u597d",
+          "\u8001\u8096",
+          "\u8001\u8427",
+          "\u8001\u5c0f",
+          "\u8001\u6d88",
+          "\u8001\u5e08",
+          "\u8001\u6821"
         ]);
       }
 
@@ -823,11 +834,11 @@
           }
           if (window.AndroidVoice.startWithConfig) {
             window.AndroidVoice.startWithConfig(
-              isWake ? 4600 : (isInterrupt ? 2600 : 9000),
-              isWake ? 650 : (isInterrupt ? 420 : 650),
-              isWake ? 700 : (isInterrupt ? 520 : 680),
-              isInterrupt ? 420 : 320,
-              isWake ? 3400 : (isInterrupt ? 2400 : 5200)
+              isWake ? 4600 : (isInterrupt ? 2200 : 9000),
+              isWake ? 650 : (isInterrupt ? 300 : 650),
+              isWake ? 700 : (isInterrupt ? 420 : 680),
+              isInterrupt ? 260 : 320,
+              isWake ? 3400 : (isInterrupt ? 1900 : 5200)
             );
           } else {
             window.AndroidVoice.start();
